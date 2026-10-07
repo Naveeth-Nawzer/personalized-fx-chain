@@ -1,0 +1,19 @@
+# ============================================================
+# DAPN System Configuration
+# Differentiable Audio Processing Network
+# ============================================================
+
+audio:
+  sample_rate: 44100       # Hz — standard CD-quality sample rate
+  channels: 1              # 1 = mono (extend to 2 for stereo in future)
+  audio_format: WAV        # File format for I/O
+  dtype: float32           # PyTorch floating-point dtype
+  max_duration_seconds: 10 # Maximum audio clip length the pipeline accepts
+
+chain:
+  min_chain_length: 1      # Minimum number of effects in a chain
+  max_chain_length: 8      # Maximum number of effects in a chain
+  allow_repeated_effects: false  # Prevent duplicate effect types in one chain
+
+logging:
+  level: INFO              # Logging verbosity (DEBUG | INFO | WARNING | ERROR)

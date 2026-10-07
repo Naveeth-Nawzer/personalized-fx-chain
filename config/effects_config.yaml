@@ -1,0 +1,222 @@
+# ============================================================
+# DAPN Effects Configuration
+# Differentiable Audio Processing Network
+# ============================================================
+# All parameters have:
+#   - normalized_range: [0, 1]  — the ML-facing representation
+#   - physical_range:           — the actual DSP value
+#   - unit:                     — physical unit for documentation
+#   - mapping_type:             — 'linear' | 'log' (MVP = linear only)
+#   - required: true            — must be present in every chain step for this effect
+# ============================================================
+
+effects:
+  EQ:
+    description: "Parametric equalizer — boosts or cuts a frequency band"
+    parameters:
+      frequency:
+        normalized_range: [0.0, 1.0]
+        physical_range: [20.0, 20000.0]
+        unit: Hz
+        mapping_type: linear
+        required: true
+      gain:
+        normalized_range: [0.0, 1.0]
+        physical_range: [-12.0, 12.0]
+        unit: dB
+        mapping_type: linear
+        required: true
+      q:
+        normalized_range: [0.0, 1.0]
+        physical_range: [0.1, 10.0]
+        unit: dimensionless
+        mapping_type: linear
+        required: true
+
+  Compressor:
+    description: "Dynamic range compressor"
+    parameters:
+      threshold:
+        normalized_range: [0.0, 1.0]
+        physical_range: [-60.0, 0.0]
+        unit: dB
+        mapping_type: linear
+        required: true
+      ratio:
+        normalized_range: [0.0, 1.0]
+        physical_range: [1.0, 20.0]
+        unit: dimensionless
+        mapping_type: linear
+        required: true
+      attack:
+        normalized_range: [0.0, 1.0]
+        physical_range: [0.1, 100.0]
+        unit: ms
+        mapping_type: linear
+        required: true
+      release:
+        normalized_range: [0.0, 1.0]
+        physical_range: [10.0, 1000.0]
+        unit: ms
+        mapping_type: linear
+        required: true
+      makeup_gain:
+        normalized_range: [0.0, 1.0]
+        physical_range: [0.0, 12.0]
+        unit: dB
+        mapping_type: linear
+        required: true
+
+  Reverb:
+    description: "Algorithmic reverberation effect"
+    parameters:
+      room_size:
+        normalized_range: [0.0, 1.0]
+        physical_range: [0.0, 1.0]
+        unit: dimensionless
+        mapping_type: linear
+        required: true
+      damping:
+        normalized_range: [0.0, 1.0]
+        physical_range: [0.0, 1.0]
+        unit: dimensionless
+        mapping_type: linear
+        required: true
+      wet_mix:
+        normalized_range: [0.0, 1.0]
+        physical_range: [0.0, 1.0]
+        unit: dimensionless
+        mapping_type: linear
+        required: true
+      dry_mix:
+        normalized_range: [0.0, 1.0]
+        physical_range: [0.0, 1.0]
+        unit: dimensionless
+        mapping_type: linear
+        required: true
+      decay:
+        normalized_range: [0.0, 1.0]
+        physical_range: [0.1, 10.0]
+        unit: s
+        mapping_type: linear
+        required: true
+
+  Distortion:
+    description: "Waveshaping distortion effect"
+    parameters:
+      drive:
+        normalized_range: [0.0, 1.0]
+        physical_range: [0.0, 1.0]
+        unit: dimensionless
+        mapping_type: linear
+        required: true
+      tone:
+        normalized_range: [0.0, 1.0]
+        physical_range: [0.0, 1.0]
+        unit: dimensionless
+        mapping_type: linear
+        required: true
+      mix:
+        normalized_range: [0.0, 1.0]
+        physical_range: [0.0, 1.0]
+        unit: dimensionless
+        mapping_type: linear
+        required: true
+      output_gain:
+        normalized_range: [0.0, 1.0]
+        physical_range: [-12.0, 6.0]
+        unit: dB
+        mapping_type: linear
+        required: true
+
+  Delay:
+    description: "Tape-style delay / echo effect"
+    parameters:
+      delay_time:
+        normalized_range: [0.0, 1.0]
+        physical_range: [1.0, 2000.0]
+        unit: ms
+        mapping_type: linear
+        required: true
+      feedback:
+        normalized_range: [0.0, 1.0]
+        physical_range: [0.0, 0.95]
+        unit: dimensionless
+        mapping_type: linear
+        required: true
+      wet_mix:
+        normalized_range: [0.0, 1.0]
+        physical_range: [0.0, 1.0]
+        unit: dimensionless
+        mapping_type: linear
+        required: true
+      dry_mix:
+        normalized_range: [0.0, 1.0]
+        physical_range: [0.0, 1.0]
+        unit: dimensionless
+        mapping_type: linear
+        required: true
+
+  Chorus:
+    description: "Chorus modulation effect"
+    parameters:
+      rate:
+        normalized_range: [0.0, 1.0]
+        physical_range: [0.1, 10.0]
+        unit: Hz
+        mapping_type: linear
+        required: true
+      depth:
+        normalized_range: [0.0, 1.0]
+        physical_range: [0.0, 1.0]
+        unit: dimensionless
+        mapping_type: linear
+        required: true
+      delay:
+        normalized_range: [0.0, 1.0]
+        physical_range: [1.0, 50.0]
+        unit: ms
+        mapping_type: linear
+        required: true
+      mix:
+        normalized_range: [0.0, 1.0]
+        physical_range: [0.0, 1.0]
+        unit: dimensionless
+        mapping_type: linear
+        required: true
+
+  Flanger:
+    description: "Flanger modulation effect"
+    parameters:
+      rate:
+        normalized_range: [0.0, 1.0]
+        physical_range: [0.1, 10.0]
+        unit: Hz
+        mapping_type: linear
+        required: true
+      depth:
+        normalized_range: [0.0, 1.0]
+        physical_range: [0.0, 1.0]
+        unit: dimensionless
+        mapping_type: linear
+        required: true
+      feedback:
+        normalized_range: [0.0, 1.0]
+        physical_range: [0.0, 0.95]
+        unit: dimensionless
+        mapping_type: linear
+        required: true
+      mix:
+        normalized_range: [0.0, 1.0]
+        physical_range: [0.0, 1.0]
+        unit: dimensionless
+        mapping_type: linear
+        required: true
+
+  STOP:
+    description: >
+      Reserved terminal action for future GRRL-Agent integration.
+      STOP is NOT an audio processing effect. It signals the agent
+      to terminate the chain. DAPN will reject STOP if it appears
+      in an audio processing chain.
+    parameters: {}
