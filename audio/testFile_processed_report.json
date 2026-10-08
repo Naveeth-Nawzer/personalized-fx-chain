@@ -1,0 +1,81 @@
+{
+  "test_status": "PASSED",
+  "timestamp": "2026-10-02T09:25:36Z",
+  "input_file": "/Users/nikshanps/Desktop/RP-PROJECT/RP-imp/RP2_A/audio/testFile.wav",
+  "output_file": "/Users/nikshanps/Desktop/RP-PROJECT/RP-imp/RP2_A/audio/testFile_processed.wav",
+  "preset": "full_chain",
+  "chain": [
+    {
+      "effect": "EQ",
+      "parameters": {
+        "frequency": 0.5,
+        "gain": 0.7,
+        "q": 0.5
+      }
+    },
+    {
+      "effect": "Compressor",
+      "parameters": {
+        "threshold": 0.5,
+        "ratio": 0.5,
+        "attack": 0.2,
+        "release": 0.4,
+        "makeup_gain": 0.2
+      }
+    },
+    {
+      "effect": "Delay",
+      "parameters": {
+        "delay_time": 0.15,
+        "feedback": 0.35,
+        "wet_mix": 0.4,
+        "dry_mix": 0.7
+      }
+    },
+    {
+      "effect": "Reverb",
+      "parameters": {
+        "room_size": 0.6,
+        "damping": 0.4,
+        "wet_mix": 0.35,
+        "dry_mix": 0.8,
+        "decay": 0.4
+      }
+    }
+  ],
+  "audio_info": {
+    "channels": 1,
+    "samples": 397341,
+    "sample_rate": 44100,
+    "duration_seconds": 9.01
+  },
+  "performance": {
+    "processing_time_ms": 1346.62,
+    "real_time_factor": 6.7
+  },
+  "input_metrics": {
+    "name": "Input (Dry)",
+    "is_finite": true,
+    "is_clipped": false,
+    "peak_linear": 0.9398,
+    "peak_dbFS": -0.54,
+    "rms_linear": 0.08896,
+    "rms_dbFS": -21.02,
+    "crest_factor_db": 20.48
+  },
+  "output_metrics": {
+    "name": "Output (Wet)",
+    "is_finite": true,
+    "is_clipped": false,
+    "peak_linear": 0.13332,
+    "peak_dbFS": -17.5,
+    "rms_linear": 0.03733,
+    "rms_dbFS": -28.56,
+    "crest_factor_db": 11.06
+  },
+  "comparison_metrics": {
+    "rms_change_db": -7.54,
+    "mse": 0.009344,
+    "l1_error": 0.061314
+  }
+}

@@ -1,0 +1,54 @@
+{
+  "test_status": "PASSED",
+  "timestamp": "2026-10-02T09:28:26Z",
+  "input_file": "/Users/nikshanps/Desktop/RP-PROJECT/RP-imp/RP2_A/audio/testFile.wav",
+  "output_file": "/Users/nikshanps/Desktop/RP-PROJECT/RP-imp/RP2_A/audio/testFile_reverb.wav",
+  "preset": "reverb_only",
+  "chain": [
+    {
+      "effect": "Reverb",
+      "parameters": {
+        "room_size": 0.7,
+        "damping": 0.3,
+        "wet_mix": 0.5,
+        "dry_mix": 0.7,
+        "decay": 0.5
+      }
+    }
+  ],
+  "audio_info": {
+    "channels": 1,
+    "samples": 397341,
+    "sample_rate": 44100,
+    "duration_seconds": 9.01
+  },
+  "performance": {
+    "processing_time_ms": 4.44,
+    "real_time_factor": 2027.7
+  },
+  "input_metrics": {
+    "name": "Input (Dry)",
+    "is_finite": true,
+    "is_clipped": false,
+    "peak_linear": 0.9398,
+    "peak_dbFS": -0.54,
+    "rms_linear": 0.08896,
+    "rms_dbFS": -21.02,
+    "crest_factor_db": 20.48
+  },
+  "output_metrics": {
+    "name": "Output (Wet)",
+    "is_finite": true,
+    "is_clipped": true,
+    "peak_linear": 1.14057,
+    "peak_dbFS": 1.14,
+    "rms_linear": 0.12118,
+    "rms_dbFS": -18.33,
+    "crest_factor_db": 19.47
+  },
+  "comparison_metrics": {
+    "rms_change_db": 2.69,
+    "mse": 0.00323,
+    "l1_error": 0.037106
+  }
+}
