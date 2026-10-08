@@ -1,12 +1,10 @@
-# Byte-compiled / optimized / DLL files
+# ============================================================
+# Python & Byte-compiled files
+# ============================================================
 __pycache__/
 *.py[cod]
 *$py.class
-
-# C extensions
 *.so
-
-# Distribution / packaging
 build/
 develop-eggs/
 dist/
@@ -25,7 +23,20 @@ share/python-wheels/
 *.egg
 MANIFEST
 
-# Unit test / coverage reports
+# ============================================================
+# Virtual Environments
+# ============================================================
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# ============================================================
+# Unit Tests & Coverage
+# ============================================================
 .pytest_cache/
 .coverage
 .coverage.*
@@ -36,27 +47,16 @@ coverage.xml
 *.py,cover
 .hypothesis/
 htmlcov/
+test_results.xml
 
-# Environments & virtualenvs
-.env
-.venv
-env/
-venv/
-ENV/
-env.bak/
-venv.bak/
-
-# Jupyter Notebook checkpoints
-.ipynb_checkpoints
-
-# IDEs and Editors
+# ============================================================
+# IDEs & System Files
+# ============================================================
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
-
-# Operating System files
 .DS_Store
 .DS_Store?
 ._*
@@ -64,8 +64,11 @@ venv.bak/
 .Trashes
 ehthumbs.db
 Thumbs.db
+.ipynb_checkpoints
 
-# Machine Learning & Deep Learning artifacts
+# ============================================================
+# Model Checkpoints & Large Weights
+# ============================================================
 checkpoints/
 weights/
 *.pt
@@ -78,9 +81,46 @@ runs/
 logs/
 *.log
 
-# Audio artifacts & temporary outputs (keep sample dry/wet wavs if needed)
+# ============================================================
+# Compressed Archives
+# ============================================================
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.7z
+*.rar
+
+# ============================================================
+# Large Audio Datasets & Raw Stems (Over 40k+ files)
+# ============================================================
+# Raw stems and external datasets
+musdb18hq/
+*slakh*/
+*Slakh*/
+slakh_training_package/newData/
+slakh_training_package/dataset/
+slakh_training_package/checkpoints/
+slakh_training_package/audio/
+**/newData/
+**/dataset/synthetic*/
+**/synthetic*/
+dataset/synthetic/
+dataset/synthetic_slakh/
+
+# Generated and temporary audio files
+*.wav
+*.flac
+*.mp3
+*.ogg
+*.aif
+*.aiff
+*.m4a
 output/
 outputs/
 temp/
 tmp/
-*.wav.tmp
+
+# Whitelist small test audio files needed for repository tests
+!audio/dry.wav
+!audio/wet.wav
