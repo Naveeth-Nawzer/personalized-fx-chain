@@ -1,0 +1,80 @@
+# ============================================================
+# Inverse FX Chain Predictor — Phase 1 (Effect-Type Prediction)
+# Dry/wet dataset generation with Pedalboard
+# ============================================================
+# Relative paths are resolved against this file's directory.
+# Effect parameters, ranges and preprocessing mirror
+# Project_Code/RP_progres_Repo/configs/phase1.yaml.
+# ============================================================
+
+paths:
+  source_dir: data/source                 # local read-only copy of the source HF dataset
+  output_dir: output/phase1_effect_type   # generated Phase 1 dataset (kept separate)
+  env_file: ../Dataset/.env               # must contain HF_TOKEN=...
+
+source:
+  repo_id: APINAJA/inverse-fx-source-audio-cleaned
+  # Categories to use from the source dataset. null = every category present
+  # (Bass, Drums, Mixture). Example: [Bass, Drums]
+  categories: null
+
+# The split is inherited from the source dataset, which is already split at
+# SONG level 70 / 15 / 15 (train / validation / test). Every effect version of
+# a source stays in the same split as its dry audio, so no song leaks.
+splits: [train, validation, test]
+
+audio:
+  sample_rate: 44100             # every generated file uses this rate
+  channels: 1                    # 1 = mono, 2 = stereo
+  duration: 10.0                 # seconds per clip (dry and wet have identical length)
+  output_subtype: FLOAT          # FLOAT (32-bit float, never clips) | PCM_24 | PCM_16
+
+preprocessing:                   # applied to the DRY clip only; wet audio is never normalised
+  normalization: lufs            # none | peak | lufs
+  target_lufs: -20.0
+  target_peak_dbfs: -1.0         # used when normalization = peak
+  peak_ceiling_dbfs: -1.0        # after LUFS gain, the dry peak is limited to this level
+  silence_threshold_dbfs: -50.0  # frames quieter than this count as silent
+  min_active_fraction: 0.5       # a clip window needs at least this fraction of non-silent frames
+  frame_length: 2048
+  window_hop_seconds: 0.5
+
+generation:
+  seed: 42                       # one seed controls clip windows and every effect parameter
+  parameter_mode: random         # random = sampled in [min, max] per sample | fixed = always `fixed`
+  min_effect_change_db: -30.0    # audibility guard: an effect must change the signal by at least this much
+  max_retries: 10                # random mode: re-sample an inaudible effect up to this many times
+
+# Fixed processing order. Every chain is applied in this order:
+#   EQ -> Compressor -> Reverb
+# The 7 combinations are all non-empty subsets of these effects.
+effect_order: [EQ, Compressor, Reverb]
+
+# Parameter names follow the shared team schema.
+#   fixed       value used when parameter_mode = fixed
+#   min / max   sampling range used when parameter_mode = random
+#   scale       linear | log
+#   random_sign sample a magnitude in [min, max] with a random +/- sign
+#   norm_range  optional range for the normalised [0, 1] value stored in metadata
+parameters:
+  EQ:                            # pedalboard.PeakFilter (single peaking band)
+    frequency:   {fixed: 1000.0, min: 100.0, max: 8000.0, scale: log, unit: Hz}
+    gain:        {fixed: 6.0, min: 3.0, max: 12.0, scale: linear, random_sign: true, unit: dB}
+    q:           {fixed: 1.0, min: 0.5, max: 4.0, scale: log, unit: dimensionless}
+  Compressor:                    # pedalboard.Compressor + pedalboard.Gain (makeup)
+    threshold:   {fixed: -24.0, min: -40.0, max: -15.0, scale: linear, unit: dB}
+    ratio:       {fixed: 4.0, min: 2.0, max: 10.0, scale: log, unit: dimensionless}
+    attack:      {fixed: 10.0, min: 1.0, max: 50.0, scale: log, unit: ms}
+    release:     {fixed: 100.0, min: 50.0, max: 500.0, scale: log, unit: ms}
+    makeup_gain: {fixed: 3.0, min: 0.0, max: 6.0, scale: linear, unit: dB}
+  Reverb:                        # pedalboard.Reverb (Freeverb-style)
+    room_size:   {fixed: 0.5, min: 0.3, max: 0.9, scale: linear, unit: dimensionless}
+    damping:     {fixed: 0.5, min: 0.2, max: 0.8, scale: linear, unit: dimensionless}
+    wet_mix:     {fixed: 0.3, min: 0.15, max: 0.5, scale: linear, unit: dimensionless}
+    dry_mix:     {fixed: 0.7, min: 0.6, max: 0.9, scale: linear, unit: dimensionless}
+    width:       {fixed: 1.0, min: 1.0, max: 1.0, scale: linear, norm_range: [0.0, 1.0], unit: dimensionless}
+
+huggingface:
+  repo_id: APINAJA/inverse-fx-phase1-effect-type
+  private: true                  # derived from MUSDB18: non-commercial research use only
+  commit_message: Upload Phase 1 dry/wet effect-type dataset

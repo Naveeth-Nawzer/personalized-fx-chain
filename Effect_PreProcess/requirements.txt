@@ -1,0 +1,11 @@
+# Phase 1 effect dataset generation (Python 3.10-3.12 recommended)
+numpy>=1.24
+scipy>=1.10
+soundfile>=0.12
+pyloudnorm>=0.1.1
+pedalboard>=0.9
+PyYAML>=6.0
+huggingface_hub>=0.25
+# Parquet export for the HF Dataset Viewer. Pinned: newer pyarrow DLLs are
+# blocked by Windows Application Control on this machine.
+pyarrow==21.0.0
