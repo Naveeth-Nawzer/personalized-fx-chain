@@ -1,0 +1,12 @@
+# Phase 1 dataset preparation (Python 3.10+)
+numpy>=1.24
+scipy>=1.10
+soundfile>=0.12
+pyloudnorm>=0.1.1
+PyYAML>=6.0
+
+# Optional DSP backend (select with `effects.backend: pedalboard` or `--backend pedalboard`)
+pedalboard>=0.9
+
+# Testing
+pytest>=7.0

@@ -1,0 +1,102 @@
+# ============================================================
+# Inverse FX Chain Predictor — Phase 1 (Effect-Type Prediction)
+# Dataset preparation configuration
+# ============================================================
+# Relative paths in this file are resolved against the project root
+# (the directory that contains `configs/`). Paths passed on the command
+# line are resolved against the current working directory.
+# Every value here can be overridden from the CLI (see README).
+# ============================================================
+
+paths:
+  input_dir: null                                  # source dataset root, e.g. <musdb>/train (set via --input-dir)
+  output_dir: data/processed/phase1_effect_type    # generated dry/wet audio
+  metadata_dir: data/metadata/phase1               # CSVs, summary JSON, logs
+
+dataset:
+  num_source_files: 100          # number of ORIGINAL dry recordings (not effect combinations)
+  audio_extensions: [".wav", ".flac", ".mp3"]
+  include_categories: null       # null = every category found (category = filename stem, e.g. "vocals")
+  exclude_categories: []         # e.g. ["mixture"] to drop full mixes
+  stratify_by_category: true     # balance selected sources across categories
+
+audio:
+  sample_rate: 44100             # every generated file uses this rate
+  channels: 1                    # 1 = mono, 2 = stereo
+  duration: 10.0                 # seconds per clip (dry and wet have identical length)
+  output_format: wav
+  output_subtype: FLOAT          # FLOAT (32-bit float, no clipping) | PCM_24 | PCM_16
+
+preprocessing:
+  normalization: lufs            # none | peak | lufs  (applied to the DRY clip only; wet is never normalised)
+  target_lufs: -20.0             # used when normalization = lufs
+  target_peak_dbfs: -1.0         # used when normalization = peak
+  peak_ceiling_dbfs: -1.0        # after LUFS gain, the dry peak is limited to this level
+  silence_threshold_dbfs: -50.0  # analysis frames quieter than this count as silent (measured before normalisation)
+  min_active_fraction: 0.5       # a clip window needs at least this fraction of non-silent frames
+  frame_length: 2048             # activity-analysis frame size (samples at the target sample rate)
+  window_hop_seconds: 0.5        # spacing between candidate clip windows
+
+effects:
+  # Canonical internal processing order is fixed: EQ -> Compressor -> Reverb.
+  # The order is NOT a Phase 1 label; it only defines how the wet audio is rendered.
+  enabled:
+    EQ: true
+    Compressor: true
+    Reverb: true
+  # DSP backend used to render the effects:
+  #   scipy      — numpy/scipy implementation (default; runs everywhere)
+  #   pedalboard — Spotify pedalboard (optional; needs `pip install pedalboard` and a
+  #                machine that allows its native module to load)
+  # Different backends produce different audio, so never mix backends within one dataset.
+  backend: scipy
+  scipy_reverb:                  # synthetic impulse-response model used by the scipy reverb
+    rt60_min: 0.3                # seconds, reached at room_size = 0
+    rt60_max: 3.0                # seconds, reached at room_size = 1
+    pre_delay_ms: 10.0
+    damping_crossover_hz: 3000.0 # above this, decay is shortened by `damping`
+    ir_seed: 1234                # seed of the IR noise (fixed => parameters fully determine the IR)
+
+generation:
+  seed: 42
+  parameter_mode: fixed          # fixed | random
+  min_effect_change_db: -30.0    # audibility guard: 10*log10(|y-x|^2 / |x|^2) per effect must exceed this
+  max_retries: 10                # random mode: re-sample parameters this many times if an effect is inaudible
+
+# Parameter names follow the shared team schema (config/effects_config.yaml on the DAPN branch).
+#   fixed       value used when parameter_mode = fixed
+#   min / max   safe sampling range used when parameter_mode = random
+#   scale       linear | log   (sampling distribution and normalisation)
+#   random_sign sample a magnitude in [min, max] and a random +/- sign
+#   norm_range  optional range for the [0, 1] normalised value stored in metadata
+#               (defaults to [min, max], or [-max, max] when random_sign is true)
+parameters:
+  EQ:                            # single peaking band
+    frequency:   {fixed: 1000.0, min: 100.0, max: 8000.0, scale: log, unit: Hz}
+    gain:        {fixed: 6.0, min: 3.0, max: 12.0, scale: linear, random_sign: true, unit: dB}
+    q:           {fixed: 1.0, min: 0.5, max: 4.0, scale: log, unit: dimensionless}
+  Compressor:
+    threshold:   {fixed: -24.0, min: -40.0, max: -15.0, scale: linear, unit: dB}
+    ratio:       {fixed: 4.0, min: 2.0, max: 10.0, scale: log, unit: dimensionless}
+    attack:      {fixed: 10.0, min: 1.0, max: 50.0, scale: log, unit: ms}
+    release:     {fixed: 100.0, min: 50.0, max: 500.0, scale: log, unit: ms}
+    makeup_gain: {fixed: 3.0, min: 0.0, max: 6.0, scale: linear, unit: dB}
+  Reverb:                        # algorithmic (Freeverb-style) reverb
+    room_size:   {fixed: 0.5, min: 0.3, max: 0.9, scale: linear, unit: dimensionless}
+    damping:     {fixed: 0.5, min: 0.2, max: 0.8, scale: linear, unit: dimensionless}
+    wet_mix:     {fixed: 0.3, min: 0.15, max: 0.5, scale: linear, unit: dimensionless}
+    dry_mix:     {fixed: 0.7, min: 0.6, max: 0.9, scale: linear, unit: dimensionless}
+    width:       {fixed: 1.0, min: 1.0, max: 1.0, scale: linear, norm_range: [0.0, 1.0], unit: dimensionless}
+
+split:                           # applied to SONGS first, then to source files; must sum to 1
+  train: 0.70
+  validation: 0.15
+  test: 0.15
+
+smoke_test:                      # used by --smoke-test
+  num_source_files: 3
+  output_dir: data/processed/phase1_effect_type_smoke
+  metadata_dir: data/metadata/phase1_smoke
+
+logging:
+  level: INFO
