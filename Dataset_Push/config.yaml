@@ -1,0 +1,42 @@
+# ============================================================
+# Inverse FX — source-audio dataset (build + Hugging Face push)
+# ============================================================
+# Relative paths are resolved against this file's directory.
+#
+# Sample naming:
+#   source_id       = song number (1..N, assigned in case-insensitive
+#                     alphabetical order of the song folders)
+#   source_category = one entry of `source_categories` below
+#   sample_id       = <source_id>-<source_category>, e.g. 1-Bass
+# ============================================================
+
+paths:
+  source_dir: ../Dataset                         # one folder per song: <song>/bass.wav, drums.wav, ...
+  output_dir: build/inverse-fx-source-audio-cleaned
+  env_file: ../Dataset/.env                      # must contain HF_TOKEN=...
+
+# Source categories to include. Each name maps to the stem file
+# `<name lower-cased>.wav` inside every song folder.
+# Change this list only, e.g.
+#   [Bass, Drums]                              -> bass + drums only
+#   [Bass, Drums, Vocals, Other, Mixture]      -> all MUSDB stems
+source_categories: [Bass, Drums, Mixture]
+
+# Song-level split: every category of a song lands in the same split
+# (no song leaks between train / validation / test). Must sum to 1.
+split:
+  train: 0.70
+  validation: 0.15
+  test: 0.15
+seed: 42
+
+# Cleaning checks (audio is copied byte-for-byte, never re-encoded).
+cleaning:
+  expected_sample_rate: 44100   # null = accept any (but all files must still agree)
+  min_rms_dbfs: -60.0           # stems quieter than this are treated as silent
+  drop_silent: true             # true = drop silent stems (listed in skipped.csv)
+
+huggingface:
+  repo_id: APINAJA/inverse-fx-source-audio-cleaned
+  private: true                 # MUSDB18 audio is licensed for non-commercial research only
+  commit_message: Upload cleaned source audio (song-level 70/15/15 split)
