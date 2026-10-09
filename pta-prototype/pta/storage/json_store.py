@@ -11,6 +11,7 @@ class JSONPreferenceStore(PreferenceStore):
     def __init__(self, base_dir: str = "data"):
         self.base_dir = Path(base_dir)
         (self.base_dir / "users").mkdir(parents=True, exist_ok=True)
+        (self.base_dir / "sessions").mkdir(parents=True, exist_ok=True)
         (self.base_dir / "feedback").mkdir(parents=True, exist_ok=True)
 
     def _profile_path(self, user_id, instrument, genre):
@@ -43,3 +44,15 @@ class JSONPreferenceStore(PreferenceStore):
         if not path.exists():
             return []
         return [json.loads(line) for line in path.read_text().splitlines()]
+
+    def save_session(self, session_preference):
+        path = (self.base_dir / "sessions"
+                / f"{session_preference.user_id}__{session_preference.session_id}.json")
+        path.write_text(json.dumps(session_preference.to_dict(), indent=2))
+
+    def load_session(self, user_id: str, session_id: str):
+        path = (self.base_dir / "sessions"
+                / f"{user_id}__{session_id}.json")
+        if not path.exists():
+            return None
+        return json.loads(path.read_text())

@@ -19,3 +19,11 @@ class PreferenceStore(ABC):
 
     @abstractmethod
     def get_feedback_history(self, session_id: str) -> list: ...
+
+    def save_session(self, session_preference) -> None:
+        """Optional — implementations can override."""
+        raise NotImplementedError("This store does not support sessions.")
+
+    def load_session(self, user_id: str, session_id: str):
+        """Optional — implementations can override."""
+        raise NotImplementedError("This store does not support sessions.")

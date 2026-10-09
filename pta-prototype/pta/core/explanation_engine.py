@@ -1,34 +1,35 @@
-"""Template-based, decision-grounded explanations. No LLM, no hallucination."""
+"""Template-based, decision-grounded explanations. Grounded in preference updates."""
 
 TEMPLATES = {
     "MORE_REVERB": (
-        "Reverb increased. Your preference for more ambience was applied "
-        "by raising the reverb wet/dry mix and extending the decay tail."
+        "Preference for more reverb recorded. The ambience preference strength "
+        "has increased and is queued to guide the next FX-chain generation."
     ),
     "LESS_REVERB": (
-        "Reverb reduced. Your preference for a tighter, drier sound was applied "
-        "by lowering the wet/dry mix."
+        "Preference for less reverb recorded. The ambience preference has decreased "
+        "toward a tighter, drier target for future generation."
     ),
     "MORE_COMPRESSION": (
-        "Compression increased. Your preference for a tighter dynamic profile "
-        "was applied by lowering the threshold and raising the ratio."
+        "Preference for more compression recorded. Target dynamics profile tightened "
+        "to guide subsequent processor parameter bounds."
     ),
     "LESS_COMPRESSION": (
-        "Compression reduced. Your preference for more natural dynamics was "
-        "applied by raising the threshold and lowering the ratio."
+        "Preference for less compression recorded. Target dynamics expanded "
+        "toward more natural dynamics."
     ),
     "BRIGHTER": (
-        "Brightness increased. The high-frequency balance was adjusted to "
-        "produce a brighter tonal character."
+        "Preference for brighter tone recorded. High-frequency balance target "
+        "increased for the FX recommendation model."
     ),
     "WARMER": (
-        "Warmth increased. Low-mid body was reinforced and harsh highs softened."
+        "Preference for warmer tone recorded. Low-mid emphasis increased and "
+        "highs softened for upcoming chain adjustments."
     ),
     "MORE_SATURATION": (
-        "Saturation increased. Harmonic coloration was added to the signal."
+        "Preference for more saturation recorded. Harmonic drive preference increased."
     ),
     "WIDER": (
-        "Stereo width increased. Side-channel energy was boosted."
+        "Preference for wider stereo image recorded. Side-channel weighting target increased."
     ),
 }
 
@@ -40,7 +41,7 @@ def generate_explanation(feedback_command: str,
     """
     Build an explanation from a feedback event.
 
-    Returns a dict so it can be stored in MongoDB as a document later.
+    Returns a dict so it can be stored in MongoDB / JSON as a document later.
     """
     base = TEMPLATES.get(feedback_command, "Preference updated.")
 
@@ -54,7 +55,7 @@ def generate_explanation(feedback_command: str,
 
     if param_changes:
         explanation["parameter_changes"] = param_changes
-        # Append concrete numbers to make the explanation auditable
+        # Append concrete numbers to make the explanation auditable if real DSP changes occur
         for key, change in param_changes.items():
             explanation["text"] += (
                 f" {key}: {change['before']:.2f} -> {change['after']:.2f}."
