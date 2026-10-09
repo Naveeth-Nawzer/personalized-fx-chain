@@ -87,3 +87,5 @@ tmp/
 
 # PTA Prototype Local Data
 pta-prototype/data/
+
+pta-prototype/evidence/

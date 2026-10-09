@@ -15,55 +15,87 @@ This prototype is a "JSON-first" implementation. Before introducing complex data
 ## Project Structure
 ```text
 pta-prototype/
-├── data/                       # Locally generated simulation data
-│   ├── feedback/               # Session histories (e.g., S001.jsonl)
-│   └── users/                  # Final user profiles (e.g., U001__electric_guitar__global.json)
+├── data/                        # Locally generated simulation data
+│   ├── feedback/                # Session histories (e.g., S001.jsonl)
+│   ├── sessions/                # Session summaries
+│   └── users/                   # Final user profiles (e.g., U001__electric_guitar__global.json)
 ├── demo/
-│   └── simulate_user_session.py # End-to-end simulation script
-├── pta/                        # Core application code
+│   ├── simulate_user_session.py # Multi-session lifecycle demo
+│   └── simulate_m3_guidance.py  # Three-mode M3 guidance demo
+├── evidence/                    # Verification evidence artifacts
+│   ├── E16_guidance_demo.txt
+│   └── sample_guidance_message.json
+├── pta/                         # Core application code
 │   ├── __init__.py
-│   ├── core/                   # The brain of the agent
+│   ├── core/                    # Core engines
 │   │   ├── __init__.py
 │   │   ├── explanation_engine.py
 │   │   ├── feedback_encoder.py
-│   │   └── preference_engine.py
-│   ├── models/                 # Data schemas
+│   │   ├── preference_engine.py
+│   │   ├── session_manager.py
+│   │   └── guidance_builder.py
+│   ├── integration/             # Component adapters
 │   │   ├── __init__.py
-│   │   └── schemas.py
-│   └── storage/                # Data persistence layer
+│   │   └── m3_adapter.py
+│   ├── models/                  # Data schemas
+│   │   ├── __init__.py
+│   │   ├── schemas.py
+│   │   └── guidance.py
+│   └── storage/                 # Data persistence layer
 │       ├── __init__.py
 │       ├── base.py
 │       └── json_store.py
-├── tests/                      # Unit testing suite
+├── tests/                       # Unit testing suite (38 tests)
 │   ├── test_feedback_encoder.py
+│   ├── test_guidance_builder.py
 │   ├── test_json_store.py
-│   └── test_preference_engine.py
-├── venv/                       # Python virtual environment
-└── README.md                   # This overview file
+│   ├── test_preference_engine.py
+│   └── test_session_manager.py
+├── venv/                        # Python virtual environment
+└── README.md                    # This overview file
 ```
 
 ## What's in Each File?
 
 ### `pta/models/schemas.py`
-Defines the `FeedbackEvent`, `Session`, and `PreferenceProfile` dataclasses. These are 1:1 representations of what will eventually become MongoDB documents. It also defines the 7-dimensional bounds of the preference vector (brightness, compression, reverb, delay, saturation, width, warmth).
+Defines the `FeedbackEvent`, `Session`, `SessionPreference`, and `PreferenceProfile` dataclasses. These are 1:1 representations of what will eventually become MongoDB documents. It also defines the 7-dimensional bounds of the preference vector (brightness, compression, reverb, delay, saturation, width, warmth).
+
+### `pta/models/guidance.py`
+Defines the M3-contract guidance message schema:
+- **Mode 1**: Scalar reward guidance (`r_pta` in `[-1, 1]`)
+- **Mode 2**: Conditioning vector (`z_taste` in `R^16` in `[-1, 1]`)
+- **Mode 3**: Constraint masking (`prohibited_effects` and normalized `parameter_bounds`)
+- Action commands (`REGENERATE` vs `NONE`) and `sample_id` tracking.
 
 ### `pta/core/feedback_encoder.py`
-Contains the `FEEDBACK_CONTROLS` taxonomy. It exports a function that translates a user command (like `"LESS_COMPRESSION"`) into a mathematical array. 
+Contains the `FEEDBACK_CONTROLS` taxonomy. It exports a function that translates a user command (like `"LESS_COMPRESSION"`) into a mathematical array.
 
 ### `pta/core/preference_engine.py`
-The core math engine. It stores a user's current vector and updates it when feedback is received. It ensures values are clipped between `-1.0` and `+1.0`.
+The core math engine. It stores a user's current vector and updates it when feedback is received using exponential smoothing with selective dimension decay.
+
+### `pta/core/session_manager.py`
+Manages the lifecycle of an interactive session: accumulates feedback, treats `SATISFIED` as terminal, logs per-event timestamps, and merges session preferences into the persistent profile without decaying untouched dimensions.
+
+### `pta/core/guidance_builder.py`
+Transforms user feedback and preference vectors into the three guidance modes accepted by M3. Computes `z_taste` projection (R^16), scalar `r_pta`, and parameter constraint bounds.
+
+### `pta/integration/m3_adapter.py`
+Interface adapter and mock receiver simulating M3 receiving and acknowledging three-mode guidance payloads.
 
 ### `pta/core/explanation_engine.py`
-Contains the `TEMPLATES` mapping and logic to generate a human-readable explanation of why the preference vector shifted, providing transparency to the user.
+Grounded explanations mapping preference shifts into human-readable production concepts.
 
 ### `pta/storage/base.py` & `pta/storage/json_store.py`
-`base.py` creates an abstract contract (`PreferenceStore`) that dictates how saving/loading must behave. `json_store.py` is the prototype implementation that writes this data to the `data/` folder instead of a real database.
+`base.py` creates an abstract contract (`PreferenceStore`). `json_store.py` persists profiles, session summaries, and raw feedback to the `data/` directory.
 
 ### `demo/simulate_user_session.py`
-An executable script that simulates a user named `U001` editing an `electric_guitar` track. It feeds 4 feedback clicks into the engine, logs the explanations, saves the history, and writes the final JSON profile.
+Multi-session demo verifying neutral session initialization and long-term profile accumulation with `--fresh` reset option.
+
+### `demo/simulate_m3_guidance.py`
+Simulates live guidance message generation and transmission to M3, saving sample JSON outputs to `evidence/`.
 
 ### `tests/test_*.py`
-A comprehensive suite of 15 automated tests using `pytest` that rigorously stress-test the math and storage logic.
+A comprehensive suite of 38 automated tests using `pytest` covering all encoders, math engines, session lifecycle, and guidance builders.
 
 ## How to Run
 
@@ -72,7 +104,12 @@ A comprehensive suite of 15 automated tests using `pytest` that rigorously stres
 python -m pytest tests/ -v
 ```
 
-**2. Run the simulation demo:**
+**2. Run the multi-session demo:**
 ```bash
-python demo/simulate_user_session.py
+python demo/simulate_user_session.py --fresh
+```
+
+**3. Run the M3 guidance demo:**
+```bash
+python demo/simulate_m3_guidance.py
 ```
