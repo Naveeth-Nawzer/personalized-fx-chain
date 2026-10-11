@@ -95,7 +95,16 @@ Multi-session demo verifying neutral session initialization and long-term profil
 Simulates live guidance message generation and transmission to M3, saving sample JSON outputs to `evidence/`.
 
 ### `tests/test_*.py`
-A comprehensive suite of 38 automated tests using `pytest` covering all encoders, math engines, session lifecycle, and guidance builders.
+A comprehensive suite of 59 automated tests using `pytest` covering all encoders, math engines, session lifecycle, guidance builders, and M3 adapter contracts.
+
+### ⚠️ Experimental components (pending contract confirmation)
+
+- `compute_reward_guidance()` — default neutral placeholder ($r_{pta} = 0.0$, confidence = 0.0) pending M3's reward semantics and $\lambda_{pta}$ confirmation. Supports pluggable `reward_fn`.
+- `build_constraints()` — placeholder parameter bounds `[0.4, 0.9]` / `[0.1, 0.3]`. Not yet validated against M2's physical ranges.
+- `WIDTH_UNSUPPORTED` — width preference is recorded and tracked in $z_{taste}$, but produces no constraints because M3 does not expose a direct stereo width processor.
+- `project_taste_vector()` — handcrafted 7→16 projection. Awaiting confirmation of M3's expected $z_{taste}$ dimension ($D=16$ or $D=32$) and whether a learned projection is expected.
+
+These are functional for the mock demo and adapter tests, but **must not be interpreted as validated guidance** for the real RL policy until M3 confirms the contract.
 
 ## How to Run
 

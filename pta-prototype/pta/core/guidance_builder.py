@@ -7,15 +7,26 @@ from pta.models.guidance import (
 from pta.models.schemas import VECTOR_DIM, VECTOR_LABELS
 
 
-# Map preference dimension → M2/M3 effect it influences
+# Map preference dimension → M2/M3 effect it influences.
+# `None` = no confirmed M2/M3 mapping yet. See WIDTH_UNSUPPORTED below.
 DIM_TO_EFFECT = {
     "brightness": "EQ",
     "compression": "Compressor",
     "reverb": "Reverb",
     "delay": "Delay",
     "saturation": "Distortion",
-    "width": None,       # width handled by stereo tools in DAPN
+    "width": None,          # ⚠️ PENDING: see WIDTH_UNSUPPORTED
     "warmth": "EQ",
+}
+
+# Dimensions with no confirmed effect mapping in M3.
+# These are recorded in `changed_dimensions` for audit, but DO NOT
+# generate constraints or reward shaping until the M2/M3 owner confirms
+# how they translate to actual DSP parameters.
+WIDTH_UNSUPPORTED = {
+    "width": "M3 exposes no direct stereo-width effect. "
+             "Chorus/Flanger may be used as stereo wideners, but the "
+             "mapping must be agreed with Sarumathy (M2) and Nikshan (M3)."
 }
 
 # Map preference dimension → M2 parameters (normalized [0,1] space)
@@ -47,8 +58,9 @@ def project_taste_vector(preference_vector: np.ndarray) -> list:
     """
     Project 7-dim preference vector → 16-dim z_taste.
 
-    For PP1: deterministic projection (7-dim + padding with semantic
-    cross-products). Post-PP1: replace with a trained encoder.
+    ⚠️ EXPERIMENTAL: Handcrafted 7→16 projection with pairwise interaction
+    terms and aggregate norms. Awaiting confirmation of M3's expected
+    z_taste dimension (D=16 or D=32) and whether a learned projection is expected.
     """
     if len(preference_vector) != VECTOR_DIM:
         raise ValueError(f"preference_vector must have {VECTOR_DIM} dimensions")
@@ -73,28 +85,42 @@ def project_taste_vector(preference_vector: np.ndarray) -> list:
     return np.clip(z, -1.0, 1.0).tolist()
 
 
-def compute_reward_guidance(preference_vector: np.ndarray,
-                            feedback_command: str) -> RewardGuidance:
+def compute_reward_guidance(
+    preference_vector: np.ndarray,
+    feedback_command: str,
+    reward_fn=None,
+) -> RewardGuidance:
     """
     Compute scalar R_pta.
 
-    Semantics: how well does the current audio match the user's taste?
-      - SATISFIED  → +1.0 (maximum satisfaction)
-      - Any change request → negative, magnitude = L1 norm of preference delta
+    ⚠️ EXPERIMENTAL: Default behavior returns r_pta=0.0 with confidence=0.0,
+    meaning "neutral, do not trust." This is intentional until M3 confirms
+    the actual reward semantics (λ_pta scaling, satisfaction signal).
+
+    Pass a `reward_fn(preference_vector, feedback_command) -> float` to
+    override with a validated formula once agreed.
     """
+    if reward_fn is not None:
+        r = float(reward_fn(preference_vector, feedback_command))
+        return RewardGuidance(
+            r_pta=max(-1.0, min(1.0, r)),
+            confidence=1.0,
+            explanation=f"Custom reward for {feedback_command}.",
+        )
+
     if feedback_command == "SATISFIED":
-        return RewardGuidance(r_pta=+1.0, confidence=1.0,
-                              explanation="User satisfied.")
+        return RewardGuidance(
+            r_pta=1.0,
+            confidence=1.0,
+            explanation="User satisfied.",
+        )
 
-    # Feedback magnitude = how much the user wanted to change
-    magnitude = float(np.sum(np.abs(preference_vector))) / 7.0
-    r_pta = -magnitude   # negative = current audio not matching taste
-
+    # Neutral placeholder — not validated
     return RewardGuidance(
-        r_pta=float(np.clip(r_pta, -1.0, 1.0)),
-        confidence=0.8,
-        explanation=f"User requested {feedback_command}; "
-                    f"preference magnitude {magnitude:.2f}.",
+        r_pta=0.0,
+        confidence=0.0,   # zero confidence = "do not trust yet"
+        explanation=f"Placeholder reward for {feedback_command}; "
+                    f"awaiting M3 contract.",
     )
 
 
@@ -102,31 +128,33 @@ def build_constraints(preference_vector: np.ndarray) -> ConstraintMask:
     """
     Build constraint mask.
 
-    Only adds constraints when preference is strong (|value| > 0.3).
+    ⚠️ EXPERIMENTAL: Parameter bounds are placeholders. Do not pass to real
+    M3 until validated against M2's physical ranges and confirmed by Sarumathy.
+
+    Dimensions in WIDTH_UNSUPPORTED are recorded but produce no constraints.
     """
     bounds = {}
     prohibited = []
 
     for i, dim in enumerate(VECTOR_LABELS):
         p = float(preference_vector[i])
-        if abs(p) <= 0.3:
+        if round(abs(p), 4) < 0.3:
             continue        # weak preference → no constraint
 
-        if p > 0.3:
-            # Strong positive preference: keep effect, target upper range
-            for effect, params in DIM_TO_PARAMS[dim].items():
-                bounds.setdefault(effect, {})
-                for param in params:
-                    bounds[effect][param] = [0.4, 0.9]
+        if dim in WIDTH_UNSUPPORTED:
+            # Explicitly skip — no confirmed M2/M3 effect for this dimension
+            continue
 
-        elif p < -0.3:
-            # Strong negative preference: suppress or clamp to lower range
-            for effect, params in DIM_TO_PARAMS[dim].items():
-                if effect and effect not in prohibited:
-                    # For "less" preferences, tighten param range downward
-                    bounds.setdefault(effect, {})
-                    for param in params:
-                        bounds[effect][param] = [0.1, 0.3]
+        effect = DIM_TO_EFFECT.get(dim)
+        if effect is None:
+            continue
+
+        if p >= 0.3 - 1e-6:
+            for param in DIM_TO_PARAMS[dim].get(effect, []):
+                bounds.setdefault(effect, {})[param] = [0.4, 0.9]
+        elif p <= -0.3 + 1e-6:
+            for param in DIM_TO_PARAMS[dim].get(effect, []):
+                bounds.setdefault(effect, {})[param] = [0.1, 0.3]
 
     return ConstraintMask(
         prohibited_effects=prohibited,
@@ -140,13 +168,17 @@ def build_guidance_message(
     sample_id: str,
     feedback_command: str,
     preference_vector: np.ndarray,
+    reward_fn=None,
 ) -> GuidanceMessage:
     """Build the complete three-mode guidance message."""
     if feedback_command == "SATISFIED":
         msg = GuidanceMessage(
-            user_id=user_id, session_id=session_id, sample_id=sample_id,
+            user_id=user_id,
+            session_id=session_id,
+            sample_id=sample_id,
             event_type="SESSION_SATISFIED",
             feedback_command="SATISFIED",
+            changed_dimensions=[],
             reward=RewardGuidance(r_pta=1.0, confidence=1.0,
                                   explanation="User satisfied."),
             z_taste=project_taste_vector(preference_vector),
@@ -156,14 +188,16 @@ def build_guidance_message(
         msg.validate()
         return msg
 
-    reward = compute_reward_guidance(preference_vector, feedback_command)
+    reward = compute_reward_guidance(preference_vector, feedback_command, reward_fn=reward_fn)
     constraints = build_constraints(preference_vector)
     z_taste = project_taste_vector(preference_vector)
 
-    changed = [COMMAND_TO_DIM.get(feedback_command, "unknown")]
+    changed = [COMMAND_TO_DIM[feedback_command]] if feedback_command in COMMAND_TO_DIM else ["unknown"]
 
     msg = GuidanceMessage(
-        user_id=user_id, session_id=session_id, sample_id=sample_id,
+        user_id=user_id,
+        session_id=session_id,
+        sample_id=sample_id,
         event_type="PREFERENCE_UPDATED",
         feedback_command=feedback_command,
         changed_dimensions=changed,

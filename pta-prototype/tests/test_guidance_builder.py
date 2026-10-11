@@ -28,11 +28,21 @@ def test_z_taste_first_seven_match_preference():
 def test_reward_positive_on_satisfied():
     r = compute_reward_guidance(SAMPLE_PREF, "SATISFIED")
     assert r.r_pta == 1.0
+    assert r.confidence == 1.0
 
 
-def test_reward_negative_on_change_request():
+def test_reward_neutral_by_default_on_change_request():
     r = compute_reward_guidance(SAMPLE_PREF, "MORE_REVERB")
-    assert r.r_pta < 0
+    assert r.r_pta == 0.0
+    assert r.confidence == 0.0
+
+
+def test_reward_custom_fn():
+    def custom_fn(pref, cmd):
+        return -0.25
+    r = compute_reward_guidance(SAMPLE_PREF, "MORE_REVERB", reward_fn=custom_fn)
+    assert r.r_pta == -0.25
+    assert r.confidence == 1.0
 
 
 def test_constraints_from_strong_positive_preference():
@@ -63,7 +73,8 @@ def test_build_full_message_preference_updated():
     assert msg.action == "REGENERATE"
     assert msg.sample_id == "sample_00482"
     assert len(msg.z_taste) == Z_TASTE_DIM
-    assert msg.reward.r_pta < 0
+    assert msg.reward.r_pta == 0.0
+    assert msg.reward.confidence == 0.0
     assert "Reverb" in msg.constraints.parameter_bounds
 
 
@@ -74,6 +85,7 @@ def test_build_full_message_satisfied():
     assert msg.event_type == "SESSION_SATISFIED"
     assert msg.action == "NONE"
     assert msg.reward.r_pta == 1.0
+    assert msg.reward.confidence == 1.0
 
 
 def test_invalid_z_taste_dimension_rejected():

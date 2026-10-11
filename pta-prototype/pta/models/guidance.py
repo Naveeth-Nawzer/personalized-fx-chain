@@ -1,4 +1,5 @@
 """PTA → M3 guidance message schemas. Matches the actual M3 contract."""
+import math
 from dataclasses import dataclass, field, asdict
 from typing import List, Dict, Literal, Optional
 from pta.models.schemas import VECTOR_DIM, VECTOR_LABELS
@@ -64,10 +65,12 @@ class GuidanceMessage:
         if len(self.z_taste) != Z_TASTE_DIM:
             raise ValueError(f"z_taste must have length {Z_TASTE_DIM}")
         for v in self.z_taste:
-            if not (-1.0 <= v <= 1.0):
+            if math.isnan(v) or math.isinf(v) or not (-1.0 <= v <= 1.0):
                 raise ValueError(f"z_taste out of range: {v}")
-        if not (-1.0 <= self.reward.r_pta <= 1.0):
+        if math.isnan(self.reward.r_pta) or math.isinf(self.reward.r_pta) or not (-1.0 <= self.reward.r_pta <= 1.0):
             raise ValueError(f"r_pta out of range: {self.reward.r_pta}")
+        if math.isnan(self.reward.confidence) or math.isinf(self.reward.confidence) or not (0.0 <= self.reward.confidence <= 1.0):
+            raise ValueError(f"confidence out of range: {self.reward.confidence}")
         for eff in self.constraints.prohibited_effects:
             if eff not in SUPPORTED_EFFECTS:
                 raise ValueError(f"Unknown effect in constraints: {eff}")
