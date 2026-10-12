@@ -1,0 +1,23 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "M2/M3 FX-Chain Contract",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": ["effect", "parameters"],
+    "properties": {
+      "effect": {
+        "type": "string",
+        "enum": ["EQ", "Compressor", "Delay", "Reverb", "Distortion", "Chorus", "Flanger"]
+      },
+      "parameters": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0
+        }
+      }
+    }
+  }
+}
