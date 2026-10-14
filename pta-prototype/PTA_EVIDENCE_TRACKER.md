@@ -422,12 +422,52 @@ Verified in `tests/test_mock_m3_generator.py`:
 
 ---
 
-### E25 — Source-of-Truth Interface Contracts
+### E25 — Source-of-Truth & Provisional Interface Contracts
 Cataloged in `contracts/`:
 - `m1_features.schema.json`: 11 acoustic features + metadata
 - `m2_chain.schema.json`: Canonical DAPN 7-effect normalized module schema
 - `m3_guidance.schema.json`: PTA → M3 three-mode guidance message schema
 - `m3_response.schema.json`: M3 acknowledgment response schema
+- `m3_guidance.schema.provisional.json`: Provisional schema allowing D=16 or D=32 z_taste vector until M3 confirms
+
+---
+
+### E26 — Mock Loop Rules & Invariant Enforcement
+Implemented in `pta/integration/mock_loop_rules.py`:
+- `should_regenerate()`: Returns `False` for terminal `SATISFIED` commands / `SESSION_SATISFIED` events, and honors action `REGENERATE`.
+- `record_regeneration_count()`: Increments generation count only when a new sample is actually produced, raising `ValueError` on terminal messages.
+- Full loop invariant verified in `demo/simulate_full_mocked_loop.py`:
+  - Initial generation: 1
+  - Total feedback events: 5
+  - Feedback-triggered regenerations: 4
+  - Terminal closures: 1
+  - Total samples stored: 5
+
+---
+
+### E27 — Mock Loop Rules Test Suite (10 Tests)
+Verified in `tests/test_mock_loop_rules.py`:
+- Feedback with `REGENERATE` action permits regeneration
+- `SATISFIED` command or event never regenerates
+- Terminal messages cannot be counted as generated
+- Negative count rejected
+- Object/dataclass messages supported
+- Regression: Vector is confirmed updated before guidance message is built
+- Regression: Each feedback message preserves intended `sample_id`
+
+---
+
+### E28 — Complete Test Suite Verification (77 Passed, 0 Warnings)
+Output from `python -m pytest tests/ -v`:
+- `test_feedback_encoder.py`: 5 passed
+- `test_guidance_builder.py`: 13 passed
+- `test_json_store.py`: 3 passed
+- `test_m3_adapter.py`: 20 passed
+- `test_mock_loop_rules.py`: 10 passed
+- `test_mock_m3_generator.py`: 8 passed
+- `test_preference_engine.py`: 7 passed
+- `test_session_manager.py`: 11 passed
+**Total: 77 passed in 0.38s**.
 
 
 

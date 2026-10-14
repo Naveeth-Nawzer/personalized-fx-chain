@@ -1,0 +1,150 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/pta/m3_guidance.schema.provisional.json",
+  "title": "PTA to M3 Guidance Message (PROVISIONAL)",
+  "description": "Draft for local mock testing only. Not an official team contract. Confirm fields and dimensions with M3.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "user_id",
+    "session_id",
+    "sample_id",
+    "event_type",
+    "feedback_command",
+    "changed_dimensions",
+    "reward",
+    "z_taste",
+    "constraints",
+    "action"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "user_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "session_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "sample_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "event_type": {
+      "enum": [
+        "PREFERENCE_UPDATED",
+        "SESSION_SATISFIED"
+      ]
+    },
+    "feedback_command": {
+      "enum": [
+        "MORE_REVERB",
+        "LESS_REVERB",
+        "MORE_COMPRESSION",
+        "LESS_COMPRESSION",
+        "MORE_DELAY",
+        "LESS_DELAY",
+        "BRIGHTER",
+        "WARMER",
+        "MORE_SATURATION",
+        "WIDER",
+        "SATISFIED"
+      ]
+    },
+    "changed_dimensions": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "brightness",
+          "compression",
+          "reverb",
+          "delay",
+          "saturation",
+          "width",
+          "warmth"
+        ]
+      }
+    },
+    "reward": {
+      "type": "object",
+      "required": [
+        "r_pta",
+        "confidence",
+        "explanation"
+      ],
+      "properties": {
+        "r_pta": {
+          "type": "number",
+          "minimum": -1,
+          "maximum": 1
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "explanation": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "z_taste": {
+      "oneOf": [
+        {
+          "type": "array",
+          "minItems": 16,
+          "maxItems": 16,
+          "items": {
+            "type": "number",
+            "minimum": -1,
+            "maximum": 1
+          }
+        },
+        {
+          "type": "array",
+          "minItems": 32,
+          "maxItems": 32,
+          "items": {
+            "type": "number",
+            "minimum": -1,
+            "maximum": 1
+          }
+        }
+      ]
+    },
+    "constraints": {
+      "type": "object",
+      "required": [
+        "prohibited_effects",
+        "parameter_bounds"
+      ],
+      "properties": {
+        "prohibited_effects": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "parameter_bounds": {
+          "type": "object"
+        }
+      },
+      "additionalProperties": true
+    },
+    "action": {
+      "enum": [
+        "REGENERATE",
+        "NONE",
+        "SESSION_CLOSED",
+        "NO_REGENERATION"
+      ]
+    }
+  },
+  "additionalProperties": true
+}

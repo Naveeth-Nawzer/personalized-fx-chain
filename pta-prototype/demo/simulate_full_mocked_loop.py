@@ -22,6 +22,7 @@ from pta.core.guidance_builder import build_guidance_message
 from pta.integration.m3_adapter import M3Adapter, MockM3Receiver
 from pta.integration.mock_m3_generator import MockM3Generator
 from pta.integration.mock_m1_features import MockM1Features
+from pta.integration.mock_loop_rules import should_regenerate, record_regeneration_count
 from pta.models.guidance import GuidanceMessage
 from pta.storage.json_store import JSONPreferenceStore
 
@@ -63,6 +64,9 @@ def run():
         "SATISFIED",
     ]
 
+    feedback_regen_count = 0
+    terminal_closure_count = 0
+
     for cmd in feedback_sequence:
         # PTA: update preference state
         result = session_mgr.submit_feedback(cmd)
@@ -84,18 +88,27 @@ def run():
         print(f"  constraints       : {list(guidance.constraints.parameter_bounds.keys())}")
         print(f"  M3 response       : {response['status']}")
 
-        if cmd != "SATISFIED":
-            # M3: regenerate (mocked)
+        # Enforce mock loop rules before calling generator
+        if should_regenerate(guidance):
             regen = m3_gen.generate(guidance)
             sample_id = regen["sample_id"]
+            feedback_regen_count = record_regeneration_count(
+                feedback_regen_count, guidance, generated=True
+            )
             print(f"  new sample_id     : {sample_id}")
             print(f"  new chain         : {regen['metadata']['chain']}")
+        else:
+            terminal_closure_count += 1
+            print(f"  [TERMINAL] Session closed -- no regeneration triggered.")
 
     # --- Summary ---
     print("\n" + "=" * 72)
     print("LOOP COMPLETE")
+    print(f"  Initial generations    : 1")
     print(f"  Total feedback events  : {len(receiver.received)}")
-    print(f"  Total M3 regenerations : {len(m3_gen.samples)}")
+    print(f"  Feedback regenerations : {feedback_regen_count}")
+    print(f"  Terminal closures      : {terminal_closure_count}")
+    print(f"  Total samples in store : {len(m3_gen.samples)}")
     print(f"  Session satisfied      : {session_mgr.session.satisfied}")
     print(f"  Final PTA vector       : {session_mgr.get_session_vector().round(3).tolist()}")
 
