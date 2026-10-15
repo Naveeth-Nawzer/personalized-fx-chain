@@ -34,12 +34,35 @@
       "enum": ["PREFERENCE_UPDATED", "SESSION_SATISFIED"]
     },
     "feedback_command": {
-      "type": "string"
+      "type": "string",
+      "enum": [
+        "MORE_REVERB",
+        "LESS_REVERB",
+        "MORE_COMPRESSION",
+        "LESS_COMPRESSION",
+        "MORE_DELAY",
+        "LESS_DELAY",
+        "BRIGHTER",
+        "WARMER",
+        "MORE_SATURATION",
+        "WIDER",
+        "SATISFIED"
+      ]
     },
     "changed_dimensions": {
       "type": "array",
+      "uniqueItems": true,
       "items": {
-        "type": "string"
+        "type": "string",
+        "enum": [
+          "brightness",
+          "compression",
+          "reverb",
+          "delay",
+          "saturation",
+          "width",
+          "warmth"
+        ]
       }
     },
     "reward": {
@@ -78,17 +101,39 @@
         "prohibited_effects": {
           "type": "array",
           "items": {
-            "type": "string"
+            "type": "string",
+            "enum": [
+              "EQ",
+              "Compressor",
+              "Delay",
+              "Reverb",
+              "Distortion",
+              "Chorus",
+              "Flanger"
+            ]
           }
         },
         "parameter_bounds": {
-          "type": "object"
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "minItems": 2,
+              "maxItems": 2,
+              "items": {
+                "type": "number",
+                "minimum": 0.0,
+                "maximum": 1.0
+              }
+            }
+          }
         }
       }
     },
     "action": {
       "type": "string",
-      "enum": ["REGENERATE", "NONE"]
+      "enum": ["REGENERATE", "NONE", "SESSION_CLOSED", "NO_REGENERATION"]
     }
   }
 }

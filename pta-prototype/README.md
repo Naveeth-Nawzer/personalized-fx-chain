@@ -13,16 +13,17 @@ This prototype is a "JSON-first" implementation. Before introducing complex data
 5. **Contract-First Mock Integration**: Complete mock ecosystem (`MockM3Generator`, `MockM1Features`, `M3Adapter`) simulating end-to-end audio regeneration loops without requiring live external ML dependencies.
 6. **Explainable AI (XAI) Engine**: Automatically translates vector math updates into human-readable sentences for debugging and user trust.
 7. **JSON Storage Layer**: Persists the preference vectors, session summaries, and raw feedback session history to local JSON and JSONL files.
-8. **Testing Suite**: 67 unit tests proving mathematical constraints, contradictory feedback handling, edge cases, adapter validation, and mock generation behaviors.
+8. **Testing Suite**: 87 unit tests proving mathematical constraints, contradictory feedback handling, edge cases, adapter validation, mock generation behaviors, and loop rule invariants.
 
 ## Project Structure
 ```text
 pta-prototype/
-├── contracts/                   # Source-of-truth interface JSON schemas
+├── contracts/                   # Source-of-truth & provisional JSON schemas
 │   ├── README.md
 │   ├── m1_features.schema.json  # M1 acoustic features contract
 │   ├── m2_chain.schema.json     # M2/M3 FX-chain canonical contract
 │   ├── m3_guidance.schema.json  # PTA → M3 three-mode guidance contract
+│   ├── m3_guidance.schema.provisional.json # Provisional schema (16D/32D z_taste)
 │   └── m3_response.schema.json  # M3 acknowledgment response contract
 ├── data/                        # Locally generated simulation data
 │   ├── feedback/                # Session histories (e.g., S001.jsonl)
@@ -35,6 +36,7 @@ pta-prototype/
 ├── evidence/                    # Verification evidence artifacts
 │   ├── E16_guidance_demo.txt
 │   ├── E20_mocked_loop.txt
+│   ├── E29_task9_validation.txt
 │   ├── sample_guidance_message.json
 │   └── mocked_loop_sessions.json
 ├── pta/                         # Core application code
@@ -49,6 +51,7 @@ pta-prototype/
 │   ├── integration/             # Component adapters & mocks
 │   │   ├── __init__.py
 │   │   ├── m3_adapter.py
+│   │   ├── mock_loop_rules.py
 │   │   ├── mock_m3_generator.py
 │   │   └── mock_m1_features.py
 │   ├── models/                  # Data schemas
@@ -59,11 +62,12 @@ pta-prototype/
 │       ├── __init__.py
 │       ├── base.py
 │       └── json_store.py
-├── tests/                       # Unit testing suite (67 tests)
+├── tests/                       # Unit testing suite (87 tests)
 │   ├── test_feedback_encoder.py
 │   ├── test_guidance_builder.py
 │   ├── test_json_store.py
 │   ├── test_m3_adapter.py
+│   ├── test_mock_loop_rules.py
 │   ├── test_mock_m3_generator.py
 │   ├── test_preference_engine.py
 │   └── test_session_manager.py
@@ -100,7 +104,10 @@ Transforms user feedback and preference vectors into the three guidance modes ac
 Interface adapter and mock receiver simulating M3 receiving and acknowledging three-mode guidance payloads.
 
 ### `pta/integration/mock_m3_generator.py`
-Simulates M3 generating new FX chains in response to PTA guidance messages. Respects parameter bounds, generates new `sample_id`s, and handles session closure.
+Simulates M3 generating new FX chains in response to PTA guidance messages. Respects parameter bounds, provides `generate_initial()` for clean neutral state start, generates new `sample_id`s, and handles session closure.
+
+### `pta/integration/mock_loop_rules.py`
+Encapsulates terminal guard rules (`should_regenerate`) and generation counter validation (`record_regeneration_count`) ensuring that terminal satisfaction messages never trigger regeneration.
 
 ### `pta/integration/mock_m1_features.py`
 Deterministic mock feature extractor returning 11 acoustic features matching M1's documented schema.
@@ -121,7 +128,7 @@ Simulates live stateful guidance message generation and transmission to M3.
 End-to-end loop simulation demonstrating dry audio → M1 features → M3 initial chain → user feedback → PTA update → guidance → M3 regeneration → repeat → SATISFIED.
 
 ### `tests/test_*.py`
-A comprehensive suite of 67 automated tests using `pytest` covering all encoders, math engines, session lifecycle, guidance builders, M3 adapter contracts, and mock generator behavior.
+A comprehensive suite of 87 automated tests using `pytest` covering all encoders, math engines, session lifecycle, guidance builders, M3 adapter contracts, loop rules, and mock generator behavior.
 
 ## Mocking Strategy for PP1 (Contract-First Integration)
 For the preliminary project gate (PP1), PTA uses **mock-driven contract validation**:
@@ -141,7 +148,7 @@ These are functional for the mock demo and adapter tests, but **must not be inte
 
 ## How to Run
 
-**1. Run the full test suite (67 tests):**
+**1. Run the full test suite (87 tests):**
 ```bash
 python -m pytest tests/ -v
 ```

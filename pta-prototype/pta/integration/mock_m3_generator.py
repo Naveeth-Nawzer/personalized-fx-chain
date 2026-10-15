@@ -29,6 +29,33 @@ class MockM3Generator:
     def __init__(self):
         self.samples = {}  # sample_id → metadata
 
+    def generate_initial(self, user_id: str = "U001", session_id: str = "S001") -> dict:
+        """
+        Generate initial default chain before any feedback occurs.
+        Does not require a fabricated GuidanceMessage.
+        """
+        if not user_id or not session_id:
+            raise ValueError("user_id and session_id required")
+
+        initial_sample_id = f"sample_{uuid.uuid4().hex[:8]}"
+        initial_chain = [{"effect": "EQ", "parameters": {"gain": 0.5}}]
+        metadata = {
+            "sample_id": initial_sample_id,
+            "user_id": user_id,
+            "session_id": session_id,
+            "chain": initial_chain,
+            "audio_checksum": f"chk_{uuid.uuid4().hex[:8]}",
+            "audio_duration_s": 2.0,
+            "sample_rate": 44100,
+        }
+        self.samples[initial_sample_id] = metadata
+
+        return {
+            "status": "INITIAL_GENERATED",
+            "sample_id": initial_sample_id,
+            "metadata": metadata,
+        }
+
     def generate(self, guidance: GuidanceMessage) -> dict:
         """Simulate M3 producing a new chain from PTA guidance."""
         guidance.validate()

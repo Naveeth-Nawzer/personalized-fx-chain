@@ -457,17 +457,24 @@ Verified in `tests/test_mock_loop_rules.py`:
 
 ---
 
-### E28 — Complete Test Suite Verification (77 Passed, 0 Warnings)
+### E28 — Complete Test Suite Verification (87 Passed, 0 Warnings)
 Output from `python -m pytest tests/ -v`:
 - `test_feedback_encoder.py`: 5 passed
-- `test_guidance_builder.py`: 13 passed
+- `test_guidance_builder.py`: 21 passed (includes 8 validation regression tests)
 - `test_json_store.py`: 3 passed
 - `test_m3_adapter.py`: 20 passed
 - `test_mock_loop_rules.py`: 10 passed
-- `test_mock_m3_generator.py`: 8 passed
+- `test_mock_m3_generator.py`: 10 passed (includes 2 initial-generation tests)
 - `test_preference_engine.py`: 7 passed
 - `test_session_manager.py`: 11 passed
-**Total: 77 passed in 0.38s**.
+**Total: 87 passed in 0.40s**.
+
+---
+
+### E29 — Task 9 Validation & Hardening Artifact
+Persisted in `evidence/E29_task9_validation.txt`:
+Documents full test suite results (87 passing), loop invariant breakdown (1 initial + 4 feedback-triggered + 1 terminal closure), hardened guidance validation rules, and remaining provisional integration items.
+
 
 
 

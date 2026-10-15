@@ -105,3 +105,60 @@ def test_serialization_roundtrip():
     assert d["sample_id"] == "sample_00482"
     assert isinstance(d["z_taste"], list)
     assert isinstance(d["reward"]["r_pta"], float)
+
+
+def test_validation_empty_user_id_rejected():
+    msg = build_guidance_message("U001", "S001", "sample_01", "MORE_REVERB", SAMPLE_PREF)
+    msg.user_id = ""
+    with pytest.raises(ValueError, match="user_id and session_id required"):
+        msg.validate()
+
+
+def test_validation_empty_session_id_rejected():
+    msg = build_guidance_message("U001", "S001", "sample_01", "MORE_REVERB", SAMPLE_PREF)
+    msg.session_id = "   "
+    with pytest.raises(ValueError, match="user_id and session_id required"):
+        msg.validate()
+
+
+def test_validation_unknown_feedback_command_rejected():
+    msg = build_guidance_message("U001", "S001", "sample_01", "MORE_REVERB", SAMPLE_PREF)
+    msg.feedback_command = "INVALID_COMMAND_XYZ"
+    with pytest.raises(ValueError, match="Unknown feedback_command"):
+        msg.validate()
+
+
+def test_validation_unknown_dimension_in_changed_dimensions_rejected():
+    msg = build_guidance_message("U001", "S001", "sample_01", "MORE_REVERB", SAMPLE_PREF)
+    msg.changed_dimensions = ["reverb", "unknown_dimension"]
+    with pytest.raises(ValueError, match="Unknown dimension in changed_dimensions"):
+        msg.validate()
+
+
+def test_validation_duplicate_changed_dimensions_rejected():
+    msg = build_guidance_message("U001", "S001", "sample_01", "MORE_REVERB", SAMPLE_PREF)
+    msg.changed_dimensions = ["reverb", "reverb"]
+    with pytest.raises(ValueError, match="Duplicate dimensions"):
+        msg.validate()
+
+
+def test_validation_satisfied_with_changed_dimensions_rejected():
+    msg = build_guidance_message("U001", "S001", "sample_01", "SATISFIED", SAMPLE_PREF)
+    msg.changed_dimensions = ["reverb"]
+    with pytest.raises(ValueError, match="SESSION_SATISFIED must not have changed dimensions"):
+        msg.validate()
+
+
+def test_validation_invalid_parameter_bounds_range_rejected():
+    msg = build_guidance_message("U001", "S001", "sample_01", "MORE_REVERB", SAMPLE_PREF)
+    msg.constraints.parameter_bounds = {"Reverb": {"wet_mix": [0.8, 0.2]}}
+    with pytest.raises(ValueError, match="Invalid bound range"):
+        msg.validate()
+
+
+def test_validation_invalid_parameter_bounds_effect_rejected():
+    msg = build_guidance_message("U001", "S001", "sample_01", "MORE_REVERB", SAMPLE_PREF)
+    msg.constraints.parameter_bounds = {"UnsupportedEffect": {"gain": [0.1, 0.5]}}
+    with pytest.raises(ValueError, match="Unknown effect in parameter_bounds"):
+        msg.validate()
+

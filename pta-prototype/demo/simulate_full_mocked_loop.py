@@ -50,7 +50,7 @@ def run():
     print(f"  rms_dbFS:             {dry_features['rms_dbFS']}")
 
     # --- Step 2: M3 (mocked) generates initial chain ---
-    initial = m3_gen.generate(_empty_guidance("U001", session_id))
+    initial = m3_gen.generate_initial(user_id="U001", session_id=session_id)
     sample_id = initial["sample_id"]
     print(f"\n[M3 MOCK] Initial chain: {initial['metadata']['chain']}")
     print(f"[M3 MOCK] sample_id:     {sample_id}")
@@ -121,15 +121,6 @@ def run():
 
     print(f"\n  Evidence saved to evidence/mocked_loop_sessions.json")
     print("=" * 72)
-
-
-def _empty_guidance(user_id: str, session_id: str) -> GuidanceMessage:
-    """Empty guidance for initial generation."""
-    return GuidanceMessage(
-        user_id=user_id,
-        session_id=session_id,
-        sample_id="initial",
-    )
 
 
 if __name__ == "__main__":

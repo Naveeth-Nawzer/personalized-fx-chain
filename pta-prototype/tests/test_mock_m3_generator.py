@@ -83,3 +83,21 @@ def test_no_audio_tensor_in_metadata():
     result = gen.generate(msg)
     assert "audio" not in result["metadata"]
     assert "audio_tensor" not in result["metadata"]
+
+
+def test_generate_initial_creates_valid_sample():
+    gen = MockM3Generator()
+    res = gen.generate_initial("U001", "S001")
+    assert res["status"] == "INITIAL_GENERATED"
+    assert res["sample_id"].startswith("sample_")
+    assert "chain" in res["metadata"]
+    assert res["metadata"]["user_id"] == "U001"
+    assert res["metadata"]["session_id"] == "S001"
+
+
+def test_generate_initial_tracks_in_samples_dict():
+    gen = MockM3Generator()
+    res = gen.generate_initial("U001", "S001")
+    assert res["sample_id"] in gen.samples
+    assert len(gen.samples) == 1
+
