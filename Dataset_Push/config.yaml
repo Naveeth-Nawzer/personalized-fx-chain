@@ -4,14 +4,23 @@
 # Relative paths are resolved against this file's directory.
 #
 # Sample naming:
-#   source_id       = song number (1..N, assigned in case-insensitive
-#                     alphabetical order of the song folders)
+#   source_id       = song number. Songs in `locked_sources` keep their
+#                     published id and split; new songs get the next ids
+#                     in case-insensitive alphabetical order.
 #   source_category = one entry of `source_categories` below
 #   sample_id       = <source_id>-<source_category>, e.g. 1-Bass
 # ============================================================
 
 paths:
-  source_dir: ../Dataset                         # one folder per song: <song>/bass.wav, drums.wav, ...
+  # Each entry holds song folders (<song>/bass.wav, drums.wav, ...), directly
+  # or one level down (e.g. MUSDB's train/ and test/). A song found in more
+  # than one place is taken from the first entry listed.
+  source_dirs:
+    - ../Dataset
+    - ../Dataset-02
+  # source_id -> song -> split already published on the Hub (copy of
+  # metadata/sources.csv from the previous upload). Keeps ids and splits stable.
+  locked_sources: locked_sources.csv
   output_dir: build/inverse-fx-source-audio-cleaned
   env_file: ../Dataset/.env                      # must contain HF_TOKEN=...
 
@@ -24,6 +33,8 @@ source_categories: [Bass, Drums, Mixture]
 
 # Song-level split: every category of a song lands in the same split
 # (no song leaks between train / validation / test). Must sum to 1.
+# New songs are assigned so the whole dataset is as close to these ratios
+# as possible without moving any locked song.
 split:
   train: 0.70
   validation: 0.15
@@ -39,4 +50,4 @@ cleaning:
 huggingface:
   repo_id: APINAJA/inverse-fx-source-audio-cleaned
   private: true                 # MUSDB18 audio is licensed for non-commercial research only
-  commit_message: Upload cleaned source audio (song-level 70/15/15 split)
+  commit_message: Add remaining MUSDB18 songs (Dataset-02), keep existing ids and splits

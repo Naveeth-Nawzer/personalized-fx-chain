@@ -1,8 +1,13 @@
 """Build the cleaned source-audio dataset in Hugging Face ``audiofolder`` layout.
 
-Input (read only)::
+Input (read only), for every entry of ``paths.source_dirs``::
 
     <source_dir>/<song>/bass.wav, drums.wav, mixture.wav, ...
+    <source_dir>/<group>/<song>/...         e.g. MUSDB's train/ and test/
+
+Songs listed in ``paths.locked_sources`` (the previously published
+``metadata/sources.csv``) keep their source_id and split, so new songs can be
+added to an existing Hub dataset without renumbering or moving anything.
 
 Output::
 
@@ -54,7 +59,9 @@ def load_config(path: Path) -> dict:
     config = yaml.safe_load(path.read_text(encoding="utf-8"))
     base = path.parent
     for key, value in config["paths"].items():
-        config["paths"][key] = (base / value).resolve()
+        if value is None:
+            continue
+        config["paths"][key] = [(base / v).resolve() for v in value] if isinstance(value, list) else (base / value).resolve()
     if not config["source_categories"]:
         raise ValueError("config: source_categories must list at least one category")
     if not math.isclose(sum(config["split"][s] for s in SPLITS), 1.0, abs_tol=1e-6):
@@ -66,12 +73,37 @@ def make_sample_id(source_id: int, category: str) -> str:
     return f"{source_id}-{category}"
 
 
-def discover_songs(source_dir: Path) -> list[str]:
-    """Song folders, sorted case-insensitively so source_id numbering is stable."""
-    if not source_dir.is_dir():
-        raise FileNotFoundError(f"Source directory not found: {source_dir}")
-    songs = [p.name for p in source_dir.iterdir() if p.is_dir() and not p.name.startswith(".")]
-    return sorted(songs, key=lambda s: (s.casefold(), s))
+def song_sort_key(song: str) -> tuple[str, str]:
+    return song.casefold(), song
+
+
+def discover_songs(source_dirs: list[Path]) -> dict[str, Path]:
+    """Song name -> folder. A folder with WAVs is a song; one without is a group (train/, test/) of songs.
+
+    A song present in several source dirs is taken from the first one listed.
+    """
+    songs: dict[str, Path] = {}
+    for source_dir in source_dirs:
+        if not source_dir.is_dir():
+            raise FileNotFoundError(f"Source directory not found: {source_dir}")
+        for entry in sorted(p for p in source_dir.iterdir() if p.is_dir() and not p.name.startswith(".")):
+            has_wav = any(f.suffix.lower() == ".wav" for f in entry.iterdir() if f.is_file())
+            for song_dir in [entry] if has_wav else [p for p in sorted(entry.iterdir()) if p.is_dir()]:
+                songs.setdefault(song_dir.name, song_dir)
+    return dict(sorted(songs.items(), key=lambda kv: song_sort_key(kv[0])))
+
+
+def load_locked_sources(path: Path | None) -> dict[str, tuple[int, str]]:
+    """Song -> (source_id, split) from a previously published sources.csv."""
+    if path is None:
+        return {}
+    with path.open(newline="", encoding="utf-8") as fh:
+        locked = {row["source_song"]: (int(row["source_id"]), row["split"]) for row in csv.DictReader(fh)}
+    if bad := {split for _, split in locked.values()} - set(SPLITS):
+        raise ValueError(f"{path}: unknown split(s) {sorted(bad)}")
+    if len({sid for sid, _ in locked.values()}) != len(locked):
+        raise ValueError(f"{path}: duplicate source_id")
+    return locked
 
 
 def allocate_counts(total: int, ratios: dict[str, float]) -> dict[str, int]:
@@ -88,11 +120,20 @@ def allocate_counts(total: int, ratios: dict[str, float]) -> dict[str, int]:
     return counts
 
 
-def assign_splits(source_ids: list[int], ratios: dict[str, float], seed: int) -> dict[int, str]:
-    order = list(source_ids)
+def assign_splits(source_ids: list[int], ratios: dict[str, float], seed: int,
+                  locked: dict[int, str] | None = None) -> dict[int, str]:
+    """Locked ids keep their split; the rest fill each split up to its share of the whole dataset."""
+    locked = locked or {}
+    order = [sid for sid in source_ids if sid not in locked]
     random.Random(seed).shuffle(order)
-    assignment, start = {}, 0
-    for split, count in allocate_counts(len(order), ratios).items():
+    targets = allocate_counts(len(source_ids), ratios)
+    locked_counts = Counter(locked[sid] for sid in source_ids if sid in locked)
+    need = {s: max(targets[s] - locked_counts[s], 0) for s in SPLITS}
+    # A split already over target (clipped to 0) leaves a surplus; take it from the largest remaining need.
+    for _ in range(sum(need.values()) - len(order)):
+        need[max(SPLITS, key=need.get)] -= 1
+    assignment, start = {sid: locked[sid] for sid in source_ids if sid in locked}, 0
+    for split, count in need.items():
         for sid in order[start : start + count]:
             assignment[sid] = split
         start += count
@@ -222,16 +263,27 @@ under the terms of the original dataset. Please cite MUSDB18 if you use this dat
 
 
 def build(config: dict, overwrite: bool) -> dict:
-    source_dir, output_dir = config["paths"]["source_dir"], config["paths"]["output_dir"]
+    source_dirs, output_dir = config["paths"]["source_dirs"], config["paths"]["output_dir"]
     categories = list(config["source_categories"])
     cleaning = config["cleaning"]
 
-    songs = discover_songs(source_dir)
-    if not songs:
-        sys.exit(f"No song folders found in {source_dir}")
-    source_ids = {song: i for i, song in enumerate(songs, start=1)}
-    splits = assign_splits(list(source_ids.values()), config["split"], config["seed"])
-    print(f"Found {len(songs)} songs; categories: {categories}")
+    song_dirs = discover_songs(source_dirs)
+    if not song_dirs:
+        sys.exit(f"No song folders found in {source_dirs}")
+    locked = load_locked_sources(config["paths"].get("locked_sources"))
+    if missing := sorted(set(locked) - set(song_dirs), key=song_sort_key):
+        sys.exit(f"Locked songs not found in the source dirs: {missing}")
+    # Locked songs keep their ids; new songs continue the numbering in alphabetical order.
+    source_ids = {song: sid for song, (sid, _) in locked.items()}
+    next_id = max(source_ids.values(), default=0) + 1
+    for song in song_dirs:
+        if song not in source_ids:
+            source_ids[song], next_id = next_id, next_id + 1
+    source_ids = dict(sorted(source_ids.items(), key=lambda kv: kv[1]))
+    splits = assign_splits(list(source_ids.values()), config["split"], config["seed"],
+                           {sid: split for sid, split in locked.values()})
+    print(f"Found {len(song_dirs)} songs ({len(locked)} locked, {len(song_dirs) - len(locked)} new); "
+          f"categories: {categories}")
 
     prepare_output_dir(output_dir, overwrite)
 
@@ -241,7 +293,7 @@ def build(config: dict, overwrite: bool) -> dict:
         for category in categories:
             sample_id = make_sample_id(sid, category)
             base = {"sample_id": sample_id, "source_id": sid, "source_category": category, "source_song": song}
-            src = find_stem(source_dir / song, category)
+            src = find_stem(song_dirs[song], category)
             if src is None:
                 skipped.append({**base, "reason": f"missing {category.lower()}.wav"})
                 continue
@@ -289,7 +341,7 @@ def build(config: dict, overwrite: bool) -> dict:
         "dataset": config["huggingface"]["repo_id"],
         "source_categories": categories,
         "sample_id_format": "<source_id>-<source_category>",
-        "num_sources": len(songs),
+        "num_sources": len(source_ids),
         "num_samples": len(samples),
         "num_skipped": len(skipped),
         "split_ratios": dict(config["split"]),
