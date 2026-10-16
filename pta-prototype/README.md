@@ -11,9 +11,11 @@ This prototype is a "JSON-first" implementation. Before introducing complex data
 3. **Session Lifecycle Manager**: Tracks session-scoped preference vectors independently from long-term profiles, supports terminal `SATISFIED` actions, and selectively merges session preferences into long-term user storage.
 4. **Three-Mode Guidance Interface**: Formats preference updates into the canonical M3 guidance contract (scalar reward $r_{pta}$, 16-dim conditioning vector $z_{taste}$, and normalized parameter constraint masks).
 5. **Contract-First Mock Integration**: Complete mock ecosystem (`MockM3Generator`, `MockM1Features`, `M3Adapter`) simulating end-to-end audio regeneration loops without requiring live external ML dependencies.
-6. **Explainable AI (XAI) Engine**: Automatically translates vector math updates into human-readable sentences for debugging and user trust.
+6. **Explainable AI (XAI) Engine**: Automatically translates vector math updates into human-readable sentences, grounded in active DSP constraints and chain configurations, while truthfully surfacing system limitations (e.g., mono-audio pipeline width constraints).
 7. **JSON Storage Layer**: Persists the preference vectors, session summaries, and raw feedback session history to local JSON and JSONL files.
-8. **Testing Suite**: 87 unit tests proving mathematical constraints, contradictory feedback handling, edge cases, adapter validation, mock generation behaviors, and loop rule invariants.
+8. **GRRL Integration Adapter**: Production adapter connecting PTA to Member 3's GRRL pipeline, projecting 7D preferences into canonical 16D conditioning vectors with pairwise interactions and statistical metrics, enforcing effect prohibition masks and parameter intervals, and executing via dependency injection.
+9. **Formal Contract Specification**: Documented in `contracts/pta_grrl_contract.md`, defining exact projection math, DSP intent mapping, mono rendering limitations, and schema boundaries.
+10. **Testing Suite**: 111 unit & contract tests across 11 test modules proving mathematical constraints, contradictory feedback handling, edge cases, adapter validation, mock generation behaviors, loop rule invariants, and multi-turn feedback loops in ~0.3s.
 
 ## Project Structure
 ```text
@@ -24,7 +26,8 @@ pta-prototype/
 │   ├── m2_chain.schema.json     # M2/M3 FX-chain canonical contract
 │   ├── m3_guidance.schema.json  # PTA → M3 three-mode guidance contract
 │   ├── m3_guidance.schema.provisional.json # Provisional schema (16D/32D z_taste)
-│   └── m3_response.schema.json  # M3 acknowledgment response contract
+│   ├── m3_response.schema.json  # M3 acknowledgment response contract
+│   └── pta_grrl_contract.md     # Production PTA-GRRL interface contract specification
 ├── data/                        # Locally generated simulation data
 │   ├── feedback/                # Session histories (e.g., S001.jsonl)
 │   ├── sessions/                # Session summaries
@@ -37,39 +40,46 @@ pta-prototype/
 │   ├── E16_guidance_demo.txt
 │   ├── E20_mocked_loop.txt
 │   ├── E29_task9_validation.txt
+│   ├── E30_grrl_adapter_contract.txt # Verification record of 16D projection & contract execution
 │   ├── sample_guidance_message.json
-│   └── mocked_loop_sessions.json
+│   ├── mocked_loop_sessions.json
+│   └── task9_checklist.md
 ├── pta/                         # Core application code
 │   ├── __init__.py
 │   ├── core/                    # Core engines
 │   │   ├── __init__.py
-│   │   ├── explanation_engine.py
-│   │   ├── feedback_encoder.py
-│   │   ├── preference_engine.py
-│   │   ├── session_manager.py
-│   │   └── guidance_builder.py
+│   │   ├── explanation_engine.py   # Decision-grounded XAI
+│   │   ├── feedback_encoder.py     # 11-intent directional encoder
+│   │   ├── preference_engine.py    # Exponential smoothing
+│   │   ├── preference_mapping.py   # Intent catalog & DSP mappings
+│   │   ├── session_manager.py      # Session lifecycle & merging
+│   │   └── guidance_builder.py     # 3-mode M3 guidance formatter
 │   ├── integration/             # Component adapters & mocks
 │   │   ├── __init__.py
-│   │   ├── m3_adapter.py
-│   │   ├── mock_loop_rules.py
-│   │   ├── mock_m3_generator.py
-│   │   └── mock_m1_features.py
+│   │   ├── grrl_adapter.py         # Production PTA-GRRL integration adapter
+│   │   ├── m3_adapter.py           # Contract validation & mock receiver
+│   │   ├── mock_loop_rules.py      # Terminal guard rules & counter validation
+│   │   ├── mock_m3_generator.py    # Mock FX chain generator
+│   │   └── mock_m1_features.py     # Mock 11D acoustic feature extractor
 │   ├── models/                  # Data schemas
 │   │   ├── __init__.py
-│   │   ├── schemas.py
-│   │   └── guidance.py
+│   │   ├── schemas.py              # User, session, and feedback data models
+│   │   └── guidance.py             # 3-mode guidance message models
 │   └── storage/                 # Data persistence layer
 │       ├── __init__.py
-│       ├── base.py
-│       └── json_store.py
-├── tests/                       # Unit testing suite (87 tests)
+│       ├── base.py                 # Abstract storage contract
+│       └── json_store.py           # Atomic JSON/JSONL store
+├── tests/                       # Unit & contract test suite (111 tests)
+│   ├── test_explanation_engine.py
 │   ├── test_feedback_encoder.py
+│   ├── test_grrl_adapter.py
 │   ├── test_guidance_builder.py
 │   ├── test_json_store.py
 │   ├── test_m3_adapter.py
 │   ├── test_mock_loop_rules.py
 │   ├── test_mock_m3_generator.py
 │   ├── test_preference_engine.py
+│   ├── test_real_loop_contract.py
 │   └── test_session_manager.py
 ├── venv/                        # Python virtual environment
 ├── PTA_EVIDENCE_TRACKER.md      # Detailed evidence catalog
@@ -77,6 +87,9 @@ pta-prototype/
 ```
 
 ## What's in Each File?
+
+### `contracts/pta_grrl_contract.md`
+Defines the formal interface contract between PTA and the GRRL agent (Member 3). Formally documents the 7-dimensional perceptual ordering, canonical 16D projection equations, soft preferences vs. hard constraints, mono rendering constraints, and complete JSON request/response schemas.
 
 ### `pta/models/schemas.py`
 Defines `FeedbackEvent`, `Session`, `SessionPreference`, and `PreferenceProfile` dataclasses. These are 1:1 representations of what will eventually become MongoDB documents. It also defines the 7-dimensional bounds of the preference vector (brightness, compression, reverb, delay, saturation, width, warmth).
@@ -91,6 +104,9 @@ Defines the M3-contract guidance message schema:
 ### `pta/core/feedback_encoder.py`
 Contains the `FEEDBACK_CONTROLS` taxonomy. It exports a function that translates a user command (like `"LESS_COMPRESSION"`) into a mathematical array.
 
+### `pta/core/preference_mapping.py`
+Perceptual-to-DSP guidance intent catalog (`FeedbackIntent`). Maps all 11 user feedback commands to preference deltas, target processors, parameters, and operational categories (soft preference vs. hard constraint vs. terminal action).
+
 ### `pta/core/preference_engine.py`
 The core math engine. It stores a user's current vector and updates it when feedback is received using exponential smoothing with selective dimension decay.
 
@@ -99,6 +115,9 @@ Manages the lifecycle of an interactive session: accumulates feedback, treats `S
 
 ### `pta/core/guidance_builder.py`
 Transforms user feedback and preference vectors into the three guidance modes accepted by M3. Computes `z_taste` projection (R^16), scalar `r_pta`, and parameter constraint bounds.
+
+### `pta/integration/grrl_adapter.py`
+Production integration adapter for the GRRL agent (Member 3). Validates 7D preferences, projects into canonical 16D conditioning vectors with pairwise interactions and statistical metrics, enforces effect prohibition masks and parameter intervals, and executes via dependency-injected gym environments (`env_factory`) without live GPU/PyTorch requirements.
 
 ### `pta/integration/m3_adapter.py`
 Interface adapter and mock receiver simulating M3 receiving and acknowledging three-mode guidance payloads.
@@ -113,7 +132,7 @@ Encapsulates terminal guard rules (`should_regenerate`) and generation counter v
 Deterministic mock feature extractor returning 11 acoustic features matching M1's documented schema.
 
 ### `pta/core/explanation_engine.py`
-Grounded explanations mapping preference shifts into human-readable production concepts.
+Decision-grounded explanations mapping preference shifts into human-readable production concepts, explaining active constraints and generated chains while truthfully noting system limitations (e.g. mono pipeline width constraints).
 
 ### `pta/storage/base.py` & `pta/storage/json_store.py`
 `base.py` creates an abstract contract (`PreferenceStore`). `json_store.py` persists profiles, session summaries, and raw feedback to the `data/` directory.
@@ -128,14 +147,14 @@ Simulates live stateful guidance message generation and transmission to M3.
 End-to-end loop simulation demonstrating dry audio → M1 features → M3 initial chain → user feedback → PTA update → guidance → M3 regeneration → repeat → SATISFIED.
 
 ### `tests/test_*.py`
-A comprehensive suite of 87 automated tests using `pytest` covering all encoders, math engines, session lifecycle, guidance builders, M3 adapter contracts, loop rules, and mock generator behavior.
+A comprehensive suite of 111 automated unit and contract tests across 11 test modules using `pytest` covering all encoders, math engines, session lifecycle, guidance builders, M3 adapter contracts, loop rules, mock generator behavior, GRRL integration adapters, multi-turn feedback contract loops, and decision-grounded explainability.
 
 ## Mocking Strategy for PP1 (Contract-First Integration)
 For the preliminary project gate (PP1), PTA uses **mock-driven contract validation**:
-- The interfaces between M1, M2, M3, and PTA are locked via canonical JSON schemas in `contracts/`.
-- Mocks (`MockM3Generator`, `MockM1Features`, `MockM3Receiver`) are thin (≤100 lines), deterministic, and validate incoming/outgoing messages against the agreed contracts.
+- The interfaces between M1, M2, M3, and PTA are locked via canonical JSON schemas in `contracts/` and `contracts/pta_grrl_contract.md`.
+- Mocks (`MockM3Generator`, `MockM1Features`, `MockM3Receiver`) and test doubles are thin (≤100 lines), deterministic, and validate incoming/outgoing messages against the agreed contracts.
 - This allows the PTA component to be demonstrated running full feedback loops end-to-end without waiting for live PPO training loops or real audio rendering engines.
-- When live components arrive, the mock classes are swapped for network/API clients without changing the internal PTA algorithm code.
+- When live components arrive, the adapter executes against real gym environments (`rl/grrl_env.py`) without changing internal PTA algorithm code.
 
 ### ⚠️ Experimental components (pending contract confirmation)
 
@@ -148,7 +167,7 @@ These are functional for the mock demo and adapter tests, but **must not be inte
 
 ## How to Run
 
-**1. Run the full test suite (87 tests):**
+**1. Run the full test suite (111 tests):**
 ```bash
 python -m pytest tests/ -v
 ```

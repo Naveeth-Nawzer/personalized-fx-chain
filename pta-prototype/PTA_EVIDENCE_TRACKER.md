@@ -475,6 +475,36 @@ Output from `python -m pytest tests/ -v`:
 Persisted in `evidence/E29_task9_validation.txt`:
 Documents full test suite results (87 passing), loop invariant breakdown (1 initial + 4 feedback-triggered + 1 terminal closure), hardened guidance validation rules, and remaining provisional integration items.
 
+---
 
+### E30 — GRRL Production Adapter & Real-Loop Contract Verification
+Persisted in `evidence/E30_grrl_adapter_contract.txt`:
+- Implemented `pta/integration/grrl_adapter.py` with dependency-injected `env_factory`.
+- Implemented `pta/core/preference_mapping.py` mapping feedback to structured DSP guidance intents.
+- Documented agreed production contract in `contracts/pta_grrl_contract.md`.
+- Contract tests in `tests/test_grrl_adapter.py` and `tests/test_real_loop_contract.py`:
+  - 7D preference validation (finiteness, bounds $[-1, 1]$, missing keys).
+  - 16D taste projection ($7 \text{ raw} + 6 \text{ pairwise} + 3 \text{ aggregate norms}$).
+  - Action masking enforcing prohibited effects cannot be selected by GRRL.
+  - End-to-end loop: guidance -> generation -> chain & metrics -> feedback -> terminal `SATISFIED`.
 
+---
+
+### E31 — Truthful XAI Explanations & Full Test Suite (111 Passed, 0 Warnings)
+Verified in `tests/test_explanation_engine.py`:
+- `WIDER` explicitly reports mono pipeline limitation (no fake stereo widening claims).
+- Explanations grounded in active constraints and generated chain.
+Output from `python -m pytest tests/ -v`:
+- `test_feedback_encoder.py`: 5 passed
+- `test_explanation_engine.py`: 5 passed
+- `test_grrl_adapter.py`: 17 passed
+- `test_guidance_builder.py`: 21 passed
+- `test_json_store.py`: 3 passed
+- `test_m3_adapter.py`: 20 passed
+- `test_mock_loop_rules.py`: 10 passed
+- `test_mock_m3_generator.py`: 10 passed
+- `test_preference_engine.py`: 7 passed
+- `test_real_loop_contract.py`: 2 passed
+- `test_session_manager.py`: 11 passed
+**Total: 111 passed in 0.51s**.
 
