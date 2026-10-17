@@ -533,3 +533,18 @@ Implemented and verified full evidence-grounded XAI pipeline connecting user fee
   - `test_session_manager.py`: 11 passed
 **Total: 126 passed in 0.29s**.
 
+---
+
+### E33 — Controlled Personalization Experiment & Artifact Export
+Persisted in `evidence/controlled_experiment_report.json` and executed via `demo/run_controlled_experiment.py`:
+- **Condition A (Default Baseline)**: Evaluated fixed candidate chain (`EQ`, `Compressor`, `Reverb`) using neutral preference profile $P = \mathbf{0}$.
+- **Condition B (Personalized Profile)**: Processed real user feedback (`MORE_REVERB` x2, `LESS_COMPRESSION`, `SATISFIED`), verified exponential smoothing math, merged into persistent store, and reloaded in fresh store context.
+- **Measurable Findings**:
+  - Reverb `wet_mix` shifted from $0.250 \rightarrow 0.339$ ($\Delta = +0.089$).
+  - Compressor `threshold` shifted from $0.500 \rightarrow 0.545$ ($\Delta = +0.045$).
+  - Untouched dimension (`EQ.gain`) remained exactly $0.500 \rightarrow 0.500$ ($\Delta = +0.000$), demonstrating strict dimension isolation.
+  - Constraint violations: $0$.
+  - Persistence verified across storage reload.
+  - XAI decision trace fidelity verified: no fabricated audio measurements.
+
+

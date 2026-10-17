@@ -35,7 +35,8 @@ pta-prototype/
 ├── demo/
 │   ├── simulate_user_session.py    # Multi-session lifecycle demo
 │   ├── simulate_m3_guidance.py     # Three-mode M3 guidance demo (stateful)
-│   └── simulate_full_mocked_loop.py# Full E2E loop with all components mocked
+│   ├── simulate_full_mocked_loop.py# Full E2E loop with all components mocked
+│   └── simulate_xai_decision_trace.py # 5-stage decision-trace XAI demo (3 levels)
 ├── docs/                        # Architectural & XAI documentation
 │   └── xai_design.md            # Evidence-grounded XAI design & evaluation methodology
 ├── evidence/                    # Verification evidence artifacts
@@ -195,4 +196,9 @@ python demo/simulate_m3_guidance.py
 **4. Run the full mocked end-to-end loop:**
 ```bash
 python demo/simulate_full_mocked_loop.py
+```
+
+**5. Run the 5-stage XAI Decision-Trace demonstration:**
+```bash
+python demo/simulate_xai_decision_trace.py
 ```
