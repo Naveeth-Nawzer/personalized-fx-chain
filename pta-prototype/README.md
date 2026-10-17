@@ -15,7 +15,7 @@ This prototype is a "JSON-first" implementation. Before introducing complex data
 7. **JSON Storage Layer**: Persists the preference vectors, session summaries, and raw feedback session history to local JSON and JSONL files.
 8. **GRRL Integration Adapter**: Production adapter connecting PTA to Member 3's GRRL pipeline, projecting 7D preferences into canonical 16D conditioning vectors with pairwise interactions and statistical metrics, enforcing effect prohibition masks and parameter intervals, and executing via dependency injection.
 9. **Formal Contract & XAI Design Specifications**: Documented in `contracts/pta_grrl_contract.md` and `docs/xai_design.md`, defining exact projection math, DSP intent mapping, mono rendering limitations, and schema boundaries.
-10. **Testing Suite**: 136 unit, contract, and CLI interactive tests across 13 test modules proving mathematical constraints, contradictory feedback handling, edge cases, adapter validation, mock generation behaviors, loop rule invariants, multi-turn feedback loops, and explanation fidelity in ~0.3s.
+10. **Testing Suite**: 144 unit, contract, CLI interactive, and priority invariant tests across 13 test modules proving mathematical constraints, contradictory feedback handling, edge cases, adapter validation, mock generation behaviors, loop rule invariants, multi-turn feedback loops, and explanation fidelity in ~0.5s.
 11. **Interactive Terminal CLI (`run_pta.py`)**: A live terminal application enabling examiners and users to participate as live actors, test New User and Existing User workflows, inspect real before/after vector diff tables, review evidence-grounded XAI cards, verify persistent profile accumulation across restarts, and inspect the derived 16-D conditioning vector.
 
 ## Project Structure
@@ -194,7 +194,7 @@ python run_pta.py
 ```
 *Allows live participation as a user: create new users, load existing persistent profiles, apply feedback clicks (e.g. `MORE_REVERB`), view live vector diff tables, review grounded XAI cards, inspect 16-D conditioning vectors (`z_taste`), and finalize sessions with selective dimension preservation.*
 
-**2. Run the full automated test suite (136 tests):**
+**2. Run the full automated test suite (144 tests):**
 ```bash
 python -m pytest tests/ -v
 ```

@@ -272,3 +272,133 @@ def test_app_list_users_and_system_status():
     assert "SYSTEM SPECIFICATIONS & XAI GROUNDING INTEGRITY" in joined
     assert "alpha=0.30" in joined
     assert "Every new session starts with all zeros" in joined
+
+
+# --- 4. Formal Priority Invariant Tests ---
+
+def test_priority_1_existing_user_starts_with_seven_zeros():
+    """Priority 1: Existing user starts a new session with exactly seven zeros."""
+    store = JSONPreferenceStore(base_dir=TEST_DIR)
+    # Save a non-zero profile
+    store.save_profile("U001", [0.2, -0.4, 0.6, 0.1, 0.0, 0.3, -0.1], "electric_guitar", "rock")
+    
+    # Initialize a new session
+    mgr = SessionManager("U001", "electric_guitar", "rock", store=store)
+    sess_vec = mgr.get_session_vector()
+    assert np.all(sess_vec == 0.0)
+    assert len(sess_vec) == VECTOR_DIM
+
+
+def test_priority_2_repeated_feedback_exponential_smoothing_convergence():
+    """Priority 2: Repeated feedback mathematically converges via P_(t+1) = (1-a)*P_t + a*d (a=0.30)."""
+    mgr = SessionManager("U001", alpha=DEFAULT_ALPHA)
+    # Target = +1.0 for MORE_COMPRESSION (dim index 1)
+    res1 = mgr.submit_feedback("MORE_COMPRESSION")
+    assert mgr.get_session_vector()[1] == pytest.approx(0.300, abs=1e-5)
+    
+    res2 = mgr.submit_feedback("MORE_COMPRESSION")
+    assert mgr.get_session_vector()[1] == pytest.approx(0.510, abs=1e-5)
+    
+    res3 = mgr.submit_feedback("MORE_COMPRESSION")
+    assert mgr.get_session_vector()[1] == pytest.approx(0.657, abs=1e-5)
+    assert round(mgr.get_session_vector()[1], 2) == 0.66
+
+
+def test_priority_4_cancellation_preserves_persistent_profile():
+    """Priority 4: Cancelling a session leaves persistent profile untouched."""
+    store = JSONPreferenceStore(base_dir=TEST_DIR)
+    store.save_profile("U001", [0.0, -0.66, 0.51, 0.0, 0.0, 0.15, 0.0], "electric_guitar", "rock")
+    before_profile = store.load_profile("U001", "electric_guitar", "rock")
+    
+    mgr = SessionManager("U001", "electric_guitar", "rock", store=store)
+    mgr.submit_feedback("MORE_DELAY")
+    mgr.submit_feedback("MORE_REVERB")
+    
+    # Session is abandoned without SATISFIED/merge
+    after_profile = store.load_profile("U001", "electric_guitar", "rock")
+    assert before_profile == after_profile
+
+
+def test_priority_6_z_taste_derived_strictly_from_current_session_vector():
+    """Priority 6: z_taste 16-D vector is derived directly from the current session vector, not saved profile."""
+    from pta.core.guidance_builder import project_taste_vector
+    
+    # Session vector with non-zero compression (0.66) and delay (0.30)
+    sess_vec = np.array([0.0, 0.66, 0.0, 0.30, 0.0, 0.0, 0.0], dtype=float)
+    z = project_taste_vector(sess_vec)
+    
+    assert len(z) == 16
+    # Direct slots 0..6
+    assert np.allclose(z[:7], sess_vec)
+    # Slot 7: comp x reverb = 0.66 * 0.0 = 0.0
+    assert z[7] == 0.0
+    # Slot 8: reverb x delay = 0.0 * 0.30 = 0.0
+    assert z[8] == 0.0
+    # Slot 13: L1 mean = (0.66 + 0.30) / 7 = 0.1371
+    assert z[13] == pytest.approx((0.66 + 0.30) / 7.0, abs=1e-4)
+    # Slot 14: L2 RMS = sqrt((0.66^2 + 0.30^2)/7) = sqrt(0.5256/7) = 0.2740
+    assert z[14] == pytest.approx(np.sqrt((0.66**2 + 0.30**2)/7.0), abs=1e-4)
+    # Slot 15: max abs = 0.66
+    assert z[15] == pytest.approx(0.66, abs=1e-4)
+
+
+def test_priority_7_xai_explanation_fidelity_and_alpha():
+    """Priority 7: Explanation faithfully reports command, dimension, delta, and alpha=0.30."""
+    mgr = SessionManager("U001", alpha=DEFAULT_ALPHA)
+    res = mgr.submit_feedback("MORE_DELAY")
+    
+    card = format_xai_card(
+        command="MORE_DELAY",
+        active_dimension=res["active_dimension"],
+        before_val=res["preference_before"][3],
+        after_val=res["preference_after"][3],
+        explanation_text=res["explanation"],
+        alpha=DEFAULT_ALPHA,
+    )
+    assert "MORE_DELAY" in card
+    assert "Delay" in card
+    assert "alpha=0.30" in card
+    assert "0.00 -> 0.30 (+0.30)" in card
+
+
+def test_priority_8_duplicate_merge_prevention():
+    """Priority 8: Calling merge_into_long_term twice on the same session raises RuntimeError."""
+    store = JSONPreferenceStore(base_dir=TEST_DIR)
+    mgr = SessionManager("U001", "electric_guitar", "rock", store=store)
+    mgr.submit_feedback("MORE_REVERB")
+    mgr.submit_feedback("SATISFIED")
+    
+    first_merge = mgr.merge_into_long_term()
+    assert first_merge is not None
+    with pytest.raises(RuntimeError, match="already merged"):
+        mgr.merge_into_long_term()
+
+
+def test_edge_cases_negative_direction_and_bounds_clamping():
+    """Edge cases: Negative feedback converges and bounds clamp cleanly at [-1.0, 1.0]."""
+    mgr = SessionManager("U001", alpha=DEFAULT_ALPHA)
+    # Negative direction
+    mgr.submit_feedback("LESS_REVERB")
+    assert mgr.get_session_vector()[2] == pytest.approx(-0.30, abs=1e-5)
+    mgr.submit_feedback("LESS_REVERB")
+    assert mgr.get_session_vector()[2] == pytest.approx(-0.51, abs=1e-5)
+    
+    # Multiple clicks should clamp at -1.0 without overflowing
+    for _ in range(20):
+        mgr.submit_feedback("LESS_REVERB")
+    assert mgr.get_session_vector()[2] >= -1.0
+    assert mgr.get_session_vector()[2] == pytest.approx(-1.0, abs=1e-3)
+
+
+def test_edge_case_empty_session_satisfied_no_changes():
+    """Edge case: User starts session and clicks SATISFIED immediately without feedback."""
+    store = JSONPreferenceStore(base_dir=TEST_DIR)
+    store.save_profile("U001", [0.2, -0.4, 0.6, 0.0, 0.0, 0.0, 0.0], "electric_guitar", "rock")
+    before = store.load_profile("U001", "electric_guitar", "rock")
+    
+    mgr = SessionManager("U001", "electric_guitar", "rock", store=store)
+    mgr.submit_feedback("SATISFIED")
+    merged = mgr.merge_into_long_term()
+    
+    # Untouched dimensions retain exact prior values
+    assert merged == before

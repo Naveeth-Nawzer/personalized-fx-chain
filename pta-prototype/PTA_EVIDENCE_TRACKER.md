@@ -549,22 +549,24 @@ Persisted in `evidence/controlled_experiment_report.json` and executed via `demo
 
 ---
 
-### E34 — Interactive Terminal Application CLI & Multi-Session Architecture (136 Passed)
+### E34 — Interactive Terminal Application CLI & Multi-Session Architecture (144 Passed)
 Implemented and verified live, examiner-facing interactive terminal application in `run_pta.py` and `pta/cli/`:
 - **Multi-Session Architectural Separation**:
   - Independent Session-Local Vector: Every session (whether for a new user or returning user) initializes its preference vector independently to ALL ZEROS ($[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]$).
   - Saved Long-Term Profile: Preserved across sessions in `data/users/` as prior learning. Displayed separately alongside the neutral session baseline.
   - Session Feedback Updates: Mathematical exponential smoothing ($P_{t+1} = (1 - \alpha) P_t + \alpha F$, with canonical $\alpha = 0.30$) updates only the session-local state.
-  - Aggregation on `SATISFIED`: At session finalization, the session vector is aggregated into the long-term profile via selective dimension preservation (untouched dimensions retain prior values with ZERO decay, while active dimensions blend smoothly with dynamic merge weights).
+  - Aggregation on `SATISFIED`: At session finalization, the session vector is aggregated into the long-term profile via selective dimension preservation:
+    $$P_{\text{new}}[d] = (1 - w) P_{\text{old}}[d] + w P_{\text{session}}[d]$$
+    where $w = 1.0$ for the initial baseline session, and $w = 0.50$ (`DEFAULT_MERGE_WEIGHT`) for subsequent sessions. Untouched dimensions retain prior values with ZERO decay.
 - **Live User Experience & Grounded XAI**:
   - Main menu routes between New User creation, Existing User resumption, Profile repository review, and System specifications audit.
   - Displays side-by-side tables: Prior Long-Term Profile vs. Session Before vs. Session After vs. Session Delta vs. Scale.
   - Displays evidence-grounded XAI cards explaining mathematical update rules, target DSP effect/parameters, and explicit scope context.
-  - Inspect 16-D Conditioning Vector: Computes deterministic $z_{taste}$ projection (slots 0..6 direct taste, 7..12 pairwise interactions, 13..15 aggregate norms).
+  - Inspect 16-D Conditioning Vector: Computes deterministic $z_{taste}$ projection (slots 0..6 direct taste, 7..12 pairwise interactions, 13..15 aggregate norms) derived strictly from current session state.
   - Truthfulness Guards: Explicitly declares `Audio rendering status: NOT EXECUTED` and `Audio quality evaluation: NOT EVALUATED`. Enforces hardware constraint note on `WIDER` for mono DAPN pipeline.
   - Universal ASCII compatibility: Formatted for zero encoding errors across Windows PowerShell, CMD, Linux, and macOS consoles.
 - **Automated Verification**:
-  - `tests/test_cli_interactive.py` (10 tests passing) validating display formatters, multi-session neutral resets, menu navigation, cancellation, and cross-session persistence across simulated process restarts.
-  - Total test suite: **136 passed in 0.30s**.
+  - `tests/test_cli_interactive.py` (18 tests passing) validating all 8 formal priorities: neutral zero-start, exponential convergence, selective long-term merge, cancellation without profile mutation, multi-session reload, 16-D $z_{taste}$ direct mathematical derivation, XAI fidelity, duplicate merge prevention, and boundary clamping.
+  - Total test suite: **144 passed in 0.50s**.
 
 
