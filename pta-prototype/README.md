@@ -15,11 +15,13 @@ This prototype is a "JSON-first" implementation. Before introducing complex data
 7. **JSON Storage Layer**: Persists the preference vectors, session summaries, and raw feedback session history to local JSON and JSONL files.
 8. **GRRL Integration Adapter**: Production adapter connecting PTA to Member 3's GRRL pipeline, projecting 7D preferences into canonical 16D conditioning vectors with pairwise interactions and statistical metrics, enforcing effect prohibition masks and parameter intervals, and executing via dependency injection.
 9. **Formal Contract & XAI Design Specifications**: Documented in `contracts/pta_grrl_contract.md` and `docs/xai_design.md`, defining exact projection math, DSP intent mapping, mono rendering limitations, and schema boundaries.
-10. **Testing Suite**: 126 unit & contract tests across 12 test modules proving mathematical constraints, contradictory feedback handling, edge cases, adapter validation, mock generation behaviors, loop rule invariants, multi-turn feedback loops, and explanation fidelity in ~0.3s.
+10. **Testing Suite**: 136 unit, contract, and CLI interactive tests across 13 test modules proving mathematical constraints, contradictory feedback handling, edge cases, adapter validation, mock generation behaviors, loop rule invariants, multi-turn feedback loops, and explanation fidelity in ~0.3s.
+11. **Interactive Terminal CLI (`run_pta.py`)**: A live terminal application enabling examiners and users to participate as live actors, test New User and Existing User workflows, inspect real before/after vector diff tables, review evidence-grounded XAI cards, verify persistent profile accumulation across restarts, and inspect the derived 16-D conditioning vector.
 
 ## Project Structure
 ```text
 pta-prototype/
+├── run_pta.py                   # Root entrypoint for live interactive terminal CLI
 ├── contracts/                   # Source-of-truth & provisional JSON schemas
 │   ├── README.md
 │   ├── m1_features.schema.json  # M1 acoustic features contract
@@ -33,6 +35,7 @@ pta-prototype/
 │   ├── sessions/                # Session summaries
 │   └── users/                   # Final user profiles (e.g., U001__electric_guitar__global.json)
 ├── demo/
+│   ├── run_controlled_experiment.py # Statistical controlled experiment (Condition A vs B)
 │   ├── simulate_user_session.py    # Multi-session lifecycle demo
 │   ├── simulate_m3_guidance.py     # Three-mode M3 guidance demo (stateful)
 │   ├── simulate_full_mocked_loop.py# Full E2E loop with all components mocked
@@ -40,6 +43,7 @@ pta-prototype/
 ├── docs/                        # Architectural & XAI documentation
 │   └── xai_design.md            # Evidence-grounded XAI design & evaluation methodology
 ├── evidence/                    # Verification evidence artifacts
+│   ├── controlled_experiment_report.json # Empirical metrics from controlled experiment
 │   ├── E16_guidance_demo.txt
 │   ├── E20_mocked_loop.txt
 │   ├── E29_task9_validation.txt
@@ -49,6 +53,11 @@ pta-prototype/
 │   └── task9_checklist.md
 ├── pta/                         # Core application code
 │   ├── __init__.py
+│   ├── cli/                     # Interactive Terminal CLI Application
+│   │   ├── __init__.py
+│   │   ├── app.py               # Top-level CLI menu & profile coordinator
+│   │   ├── display.py           # Universal ASCII diff tables, bars, & XAI cards
+│   │   └── session_runner.py    # Live session feedback loop & satisfaction handler
 │   ├── core/                    # Core engines
 │   │   ├── __init__.py
 │   │   ├── decision_trace.py       # Generation-specific decision trace records
@@ -73,7 +82,8 @@ pta-prototype/
 │       ├── __init__.py
 │       ├── base.py                 # Abstract storage contract
 │       └── json_store.py           # Atomic JSON/JSONL store
-├── tests/                       # Unit & contract test suite (126 tests)
+├── tests/                       # Unit, contract, & CLI test suite (136 tests)
+│   ├── test_cli_interactive.py      # Interactive CLI, tables, & persistence tests
 │   ├── test_explanation_engine.py
 │   ├── test_explanation_fidelity.py # Evidence-grounding & fidelity tests
 │   ├── test_feedback_encoder.py
@@ -178,27 +188,38 @@ These are functional for the mock demo and adapter tests, but **must not be inte
 
 ## How to Run
 
-**1. Run the full test suite (126 tests):**
+**1. Launch the Interactive Terminal Application (Live Examiner Demo):**
+```bash
+python run_pta.py
+```
+*Allows live participation as a user: create new users, load existing persistent profiles, apply feedback clicks (e.g. `MORE_REVERB`), view live vector diff tables, review grounded XAI cards, inspect 16-D conditioning vectors (`z_taste`), and finalize sessions with selective dimension preservation.*
+
+**2. Run the full automated test suite (136 tests):**
 ```bash
 python -m pytest tests/ -v
 ```
 
-**2. Run the multi-session demo:**
+**3. Run the statistical controlled experiment (Condition A vs Condition B):**
+```bash
+python demo/run_controlled_experiment.py
+```
+
+**4. Run the multi-session persistence demo:**
 ```bash
 python demo/simulate_user_session.py --fresh
 ```
 
-**3. Run the stateful M3 guidance demo:**
+**5. Run the stateful M3 guidance demo:**
 ```bash
 python demo/simulate_m3_guidance.py
 ```
 
-**4. Run the full mocked end-to-end loop:**
+**6. Run the full mocked end-to-end loop:**
 ```bash
 python demo/simulate_full_mocked_loop.py
 ```
 
-**5. Run the 5-stage XAI Decision-Trace demonstration:**
+**7. Run the 5-stage XAI Decision-Trace demonstration:**
 ```bash
 python demo/simulate_xai_decision_trace.py
 ```

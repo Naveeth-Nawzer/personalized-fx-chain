@@ -2,7 +2,7 @@
 from typing import Optional
 import numpy as np
 from pta.core.feedback_encoder import encode_feedback
-from pta.models.schemas import VECTOR_DIM, VECTOR_LABELS
+from pta.models.schemas import VECTOR_DIM, VECTOR_LABELS, DEFAULT_ALPHA
 
 
 class PreferenceVectorEngine:
@@ -12,12 +12,12 @@ class PreferenceVectorEngine:
     Update rule :
         P_new = (1 - alpha) * P_old + alpha * F
 
-    where F is the one-hot feedback vector and alpha is the learning rate.
+    where F is the one-hot feedback vector and alpha is the learning rate (default 0.30).
     Only the dimensions corresponding to the feedback are updated,
     leaving other dimensions unaffected.
     """
 
-    def __init__(self, user_id: str, alpha: float = 0.25,
+    def __init__(self, user_id: str, alpha: float = DEFAULT_ALPHA,
                  initial_vector: np.ndarray = None):
         if not (0.0 < alpha < 1.0):
             raise ValueError("alpha must be in (0, 1)")

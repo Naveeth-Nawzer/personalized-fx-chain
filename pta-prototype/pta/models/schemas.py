@@ -11,6 +11,10 @@ VECTOR_DIM = 7
 VECTOR_LABELS = ["brightness", "compression", "reverb", "delay",
                  "saturation", "width", "warmth"]
 
+# Canonical mathematical constants for preference updates and multi-session merging
+DEFAULT_ALPHA = 0.30          # Exponential smoothing learning rate
+DEFAULT_MERGE_WEIGHT = 0.50   # Long-term profile multi-session blending factor
+
 
 def utc_now_iso() -> str:
     """Return current UTC timestamp in ISO format without deprecation."""

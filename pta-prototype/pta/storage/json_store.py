@@ -33,6 +33,26 @@ class JSONPreferenceStore(PreferenceStore):
             return [0.0] * VECTOR_DIM
         return json.loads(path.read_text())["vector"]
 
+    def list_users(self) -> list:
+        """Scan data/users/ and return metadata for all saved user profiles."""
+        users_dir = self.base_dir / "users"
+        if not users_dir.exists():
+            return []
+        users = []
+        for file in sorted(users_dir.glob("*.json")):
+            try:
+                data = json.loads(file.read_text())
+                users.append({
+                    "user_id": data.get("user_id"),
+                    "instrument": data.get("instrument", "global"),
+                    "genre": data.get("genre", "global"),
+                    "vector": data.get("vector", [0.0] * VECTOR_DIM),
+                    "file": file.name,
+                })
+            except Exception:
+                continue
+        return users
+
     def log_feedback(self, event: dict):
         session_id = event.get("session_id", "unknown")
         path = self.base_dir / "feedback" / f"{session_id}.jsonl"

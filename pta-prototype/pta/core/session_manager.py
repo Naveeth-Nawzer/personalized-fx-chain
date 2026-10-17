@@ -5,7 +5,14 @@ import uuid
 import numpy as np
 from pta.core.preference_engine import PreferenceVectorEngine
 from pta.core.explanation_engine import generate_explanation
-from pta.models.schemas import Session, SessionPreference, VECTOR_DIM
+from pta.models.schemas import (
+    Session,
+    SessionPreference,
+    VECTOR_DIM,
+    VECTOR_LABELS,
+    DEFAULT_ALPHA,
+    DEFAULT_MERGE_WEIGHT,
+)
 
 
 class SessionManager:
@@ -13,7 +20,7 @@ class SessionManager:
     Owns a single production session.
 
     Responsibilities:
-      - Accumulate feedback into a SESSION-scoped preference vector
+      - Accumulate feedback into a SESSION-scoped preference vector (starts all zeros)
       - Associate feedback events with session and generation IDs
       - Merge the session vector into the LONG-TERM profile on completion
       - Selective dimension merge: untouched dimensions in a session do not decay
@@ -22,8 +29,8 @@ class SessionManager:
     """
 
     def __init__(self, user_id: str, instrument: str = "global",
-                 genre: str = "global", alpha: float = 0.3,
-                 store=None):
+                 genre: str = "global", alpha: float = DEFAULT_ALPHA,
+                 store=None, initial_vector: Optional[np.ndarray] = None):
         self.session = Session(
             user_id=user_id,
             instrument=instrument,
@@ -31,10 +38,15 @@ class SessionManager:
         )
         self.alpha = alpha
         self.store = store
+        init_vec = (np.array(initial_vector, dtype=float)
+                    if initial_vector is not None
+                    else np.zeros(VECTOR_DIM, dtype=float))
+        self.initial_session_vector = init_vec.copy()
+        self.session.session_vector = init_vec.tolist()
         self.engine = PreferenceVectorEngine(
             user_id=user_id,
             alpha=alpha,
-            initial_vector=np.zeros(VECTOR_DIM),   # session starts neutral
+            initial_vector=init_vec,
         )
         self._merged = False
         self.current_generation_id: Optional[str] = None
@@ -125,16 +137,19 @@ class SessionManager:
     def get_session_vector(self) -> np.ndarray:
         return self.engine.get_vector()
 
-    def merge_into_long_term(self, weight: float = 0.3):
+    def merge_into_long_term(self, weight: Optional[float] = None):
         """
         Merge the session vector into the user's long-term profile.
         Called on 'SATISFIED' or explicit user action.
 
         weight controls how much this session influences the long-term profile.
+        If weight is None:
+          - If the long-term profile is completely zero (first session), weight defaults to 1.0.
+          - Otherwise, weight defaults to DEFAULT_MERGE_WEIGHT (0.50).
         Crucially, only dimensions that received feedback during this session
         are blended; untouched dimensions in this session do NOT decay.
         """
-        if not (0.0 <= weight <= 1.0):
+        if weight is not None and not (0.0 <= weight <= 1.0):
             raise ValueError("weight must be in [0, 1]")
 
         if not self.session.satisfied:
@@ -158,12 +173,18 @@ class SessionManager:
         lt_vec = np.array(long_term, dtype=float)
         session_vec = self.engine.get_vector()
 
-        # Identify active dimensions in this session
-        active_mask = session_vec != 0.0
+        effective_weight = weight if weight is not None else (1.0 if np.all(lt_vec == 0.0) else DEFAULT_MERGE_WEIGHT)
+
+        # Identify active dimensions updated during this session
+        session_event_dims = {e.get("active_dimension") for e in self.session.feedback_events if e.get("active_dimension")}
+        active_mask = np.zeros(VECTOR_DIM, dtype=bool)
+        for i, dim_label in enumerate(VECTOR_LABELS):
+            if dim_label in session_event_dims or session_vec[i] != getattr(self, "initial_session_vector", np.zeros(VECTOR_DIM))[i]:
+                active_mask[i] = True
 
         merged = lt_vec.copy()
         if np.any(active_mask):
-            merged[active_mask] = (1.0 - weight) * lt_vec[active_mask] + weight * session_vec[active_mask]
+            merged[active_mask] = (1.0 - effective_weight) * lt_vec[active_mask] + effective_weight * session_vec[active_mask]
             merged = np.clip(merged, -1.0, 1.0)
 
         self.store.save_profile(
