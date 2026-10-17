@@ -1,7 +1,8 @@
 """The core personalization mechanism: exponential smoothing over preference vectors."""
+from typing import Optional
 import numpy as np
 from pta.core.feedback_encoder import encode_feedback
-from pta.models.schemas import VECTOR_DIM
+from pta.models.schemas import VECTOR_DIM, VECTOR_LABELS
 
 
 class PreferenceVectorEngine:
@@ -22,20 +23,25 @@ class PreferenceVectorEngine:
             raise ValueError("alpha must be in (0, 1)")
         self.user_id = user_id
         self.alpha = alpha
-        self.P_u = (np.array(initial_vector)
+        self.P_u = (np.array(initial_vector, dtype=float)
                     if initial_vector is not None
-                    else np.zeros(VECTOR_DIM))
+                    else np.zeros(VECTOR_DIM, dtype=float))
 
-    def update(self, feedback_command: str) -> dict:
+    def update(self, feedback_command: str, event_id: Optional[str] = None) -> dict:
         """
-        Apply a feedback command and return before/after states.
+        Apply a feedback command and return before/after states, active dimensions, and update metadata.
 
         Returns:
             {
                 "command": str,
-                "before": list,
-                "after": list,
-                "delta": list,
+                "event_id": str | None,
+                "active_dimension": str | None,
+                "active_dimensions": list[str],
+                "update_method": str,
+                "alpha": float,
+                "before": list[float],
+                "after": list[float],
+                "delta": list[float],
             }
         """
         before = self.P_u.copy()
@@ -48,8 +54,17 @@ class PreferenceVectorEngine:
             
         self.P_u = np.clip(self.P_u, -1.0, 1.0)
 
+        active_indices = np.where(active_mask)[0]
+        active_dims = [VECTOR_LABELS[i] for i in active_indices if i < len(VECTOR_LABELS)]
+        primary_dim = active_dims[0] if active_dims else None
+
         return {
             "command": feedback_command,
+            "event_id": event_id,
+            "active_dimension": primary_dim,
+            "active_dimensions": active_dims,
+            "update_method": "exponential_smoothing",
+            "alpha": self.alpha,
             "before": before.tolist(),
             "after": self.P_u.tolist(),
             "delta": (self.P_u - before).tolist(),
@@ -59,7 +74,7 @@ class PreferenceVectorEngine:
         return self.P_u.copy()
 
     def reset(self):
-        self.P_u = np.zeros(VECTOR_DIM)
+        self.P_u = np.zeros(VECTOR_DIM, dtype=float)
 
     def __repr__(self):
         return f"PreferenceVectorEngine(user={self.user_id}, P_u={self.P_u.round(3).tolist()})"

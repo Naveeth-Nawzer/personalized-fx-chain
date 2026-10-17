@@ -508,3 +508,28 @@ Output from `python -m pytest tests/ -v`:
 - `test_session_manager.py`: 11 passed
 **Total: 111 passed in 0.51s**.
 
+---
+
+### E32 — Three-Level Decision-Trace XAI & Fidelity Verification (126 Passed, 0 Warnings)
+Implemented and verified full evidence-grounded XAI pipeline connecting user feedback, preference updates, GRRL decisions, and DAPN outcomes:
+- Implemented `pta/core/decision_trace.py` defining `DecisionTrace` with generation-level traceability (`session_id`, `generation_id`, `feedback_event_id`, `selected_chain`, `previous_chain`, `rendering_status`, `audio_ref`, `audio_metrics`, `unsupported_requests`).
+- Extended `pta/core/explanation_engine.py` with `explain_preference_update()` and `explain_generation()`, enforcing strict evidence-based constraints (no perceptual claims without signal metrics, failed renders never claim audio outcome, prohibited effects verified).
+- Updated `pta/core/preference_engine.py` to expose active dimension metadata, event IDs, and update method.
+- Updated `pta/core/session_manager.py` to associate feedback events with active `generation_id`s.
+- Created `docs/xai_design.md` detailing the 5-stage trace pipeline, 3 levels of explanation, evidence-grounding matrix, and academic evaluation methodology.
+- Created `tests/test_explanation_fidelity.py` (15 tests passing) verifying trace fidelity, unrendered fallbacks, parameter diffs, mono truthfulness, and hard constraint enforcement.
+- Output from `python -m pytest tests/ -v`:
+  - `test_explanation_engine.py`: 5 passed
+  - `test_explanation_fidelity.py`: 15 passed
+  - `test_feedback_encoder.py`: 5 passed
+  - `test_grrl_adapter.py`: 17 passed
+  - `test_guidance_builder.py`: 21 passed
+  - `test_json_store.py`: 3 passed
+  - `test_m3_adapter.py`: 20 passed
+  - `test_mock_loop_rules.py`: 10 passed
+  - `test_mock_m3_generator.py`: 10 passed
+  - `test_preference_engine.py`: 7 passed
+  - `test_real_loop_contract.py`: 2 passed
+  - `test_session_manager.py`: 11 passed
+**Total: 126 passed in 0.29s**.
+

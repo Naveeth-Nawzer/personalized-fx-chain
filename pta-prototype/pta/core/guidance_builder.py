@@ -208,3 +208,33 @@ def build_guidance_message(
     )
     msg.validate()
     return msg
+
+
+def extract_guidance_payload(guidance: GuidanceMessage) -> dict:
+    """
+    Extract a structured record of which preference values, dimensions, and hard constraints
+    were supplied to GRRL, distinguishing requested preferences from applied DSP constraints.
+    """
+    return {
+        "user_id": guidance.user_id,
+        "session_id": guidance.session_id,
+        "sample_id": guidance.sample_id,
+        "event_type": guidance.event_type,
+        "feedback_command": guidance.feedback_command,
+        "requested_preference_dimensions": list(guidance.changed_dimensions),
+        "reward_guidance": {
+            "r_pta": float(guidance.reward.r_pta),
+            "confidence": float(guidance.reward.confidence),
+            "explanation": guidance.reward.explanation,
+        },
+        "z_taste_dimension": len(guidance.z_taste),
+        "constraints": {
+            "prohibited_effects": list(guidance.constraints.prohibited_effects),
+            "parameter_bounds": {
+                eff: {p: list(b) for p, b in p_dict.items()}
+                for eff, p_dict in guidance.constraints.parameter_bounds.items()
+            },
+        },
+        "action": guidance.action,
+    }
+

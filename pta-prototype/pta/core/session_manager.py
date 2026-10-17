@@ -1,5 +1,7 @@
 """Manage session lifecycle, aggregation, and profile merging."""
 from datetime import datetime, timezone
+from typing import Optional
+import uuid
 import numpy as np
 from pta.core.preference_engine import PreferenceVectorEngine
 from pta.core.explanation_engine import generate_explanation
@@ -12,9 +14,10 @@ class SessionManager:
 
     Responsibilities:
       - Accumulate feedback into a SESSION-scoped preference vector
+      - Associate feedback events with session and generation IDs
       - Merge the session vector into the LONG-TERM profile on completion
       - Selective dimension merge: untouched dimensions in a session do not decay
-      - Log every feedback event with per-event timestamps
+      - Log every feedback event with per-event timestamps and generation tracking
       - Treat SATISFIED as a terminal action without preference updates
     """
 
@@ -34,28 +37,44 @@ class SessionManager:
             initial_vector=np.zeros(VECTOR_DIM),   # session starts neutral
         )
         self._merged = False
+        self.current_generation_id: Optional[str] = None
 
-    def submit_feedback(self, command: str) -> dict:
-        """Process a feedback click inside this session."""
+    def set_current_generation(self, generation_id: str) -> None:
+        """Track the currently active generation ID."""
+        self.current_generation_id = generation_id
+
+    def submit_feedback(self, command: str, generation_id: Optional[str] = None) -> dict:
+        """
+        Process a feedback click inside this session.
+
+        Associates the feedback event with generation_id (if provided or active).
+        """
         if self.session.satisfied:
             raise RuntimeError("Session already marked satisfied.")
 
-        if command == "SATISFIED":
-            return self._handle_satisfied()
+        gen_id = generation_id or self.current_generation_id
 
-        result = self.engine.update(command)
+        if command == "SATISFIED":
+            return self._handle_satisfied(generation_id=gen_id)
+
+        event_id = str(uuid.uuid4())
+        result = self.engine.update(command, event_id=event_id)
         now_ts = datetime.now(timezone.utc).isoformat()
 
         self.session.iterations += 1
         self.session.session_vector = self.engine.get_vector().tolist()
-        self.session.feedback_events.append({
+        event_record = {
+            "event_id": event_id,
+            "generation_id": gen_id,
             "iteration": self.session.iterations,
             "command": command,
+            "active_dimension": result.get("active_dimension"),
             "before": result["before"],
             "after": result["after"],
             "delta": result["delta"],
             "timestamp": now_ts,
-        })
+        }
+        self.session.feedback_events.append(event_record)
 
         explanation = generate_explanation(
             feedback_command=command,
@@ -64,26 +83,25 @@ class SessionManager:
         )
 
         if self.store:
-            self.store.log_feedback({
+            log_entry = {
                 "session_id": self.session.session_id,
                 "user_id": self.session.user_id,
-                "iteration": self.session.iterations,
-                "command": command,
-                "before": result["before"],
-                "after": result["after"],
-                "delta": result["delta"],
-                "timestamp": now_ts,
-            })
+                **event_record,
+            }
+            self.store.log_feedback(log_entry)
 
         return {
             "session_id": self.session.session_id,
+            "generation_id": gen_id,
+            "event_id": event_id,
             "iteration": self.session.iterations,
+            "active_dimension": result.get("active_dimension"),
             "preference_before": result["before"],
             "preference_after": result["after"],
             "explanation": explanation["text"],
         }
 
-    def _handle_satisfied(self) -> dict:
+    def _handle_satisfied(self, generation_id: Optional[str] = None) -> dict:
         """Terminal action: no preference change, no iteration increment."""
         self.session.satisfied = True
         self.session.completed_at = datetime.now(timezone.utc).isoformat()
@@ -93,6 +111,7 @@ class SessionManager:
 
         return {
             "session_id": self.session.session_id,
+            "generation_id": generation_id or self.current_generation_id,
             "iteration": self.session.iterations,
             "preference_before": self.engine.get_vector().tolist(),
             "preference_after": self.engine.get_vector().tolist(),

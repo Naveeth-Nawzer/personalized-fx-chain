@@ -14,6 +14,7 @@ from pta.core.preference_mapping import (
     validate_preference_dict,
 )
 from pta.core.guidance_builder import project_taste_vector
+from pta.core.decision_trace import DecisionTrace
 from pta.models.schemas import VECTOR_DIM
 
 
@@ -121,6 +122,11 @@ class GRRLAdapter:
         preferences: Union[Dict[str, float], np.ndarray, list],
         constraints: Optional[Dict[str, Any]] = None,
         session_id: Optional[str] = None,
+        previous_chain: Optional[List[Dict[str, Any]]] = None,
+        feedback_command: Optional[str] = None,
+        feedback_event_id: Optional[str] = None,
+        preference_before: Optional[Union[Dict[str, float], np.ndarray, list]] = None,
+        unsupported_requests: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """
         Execute generation loop in GRRL conditioned on user preferences and constraints.
@@ -131,13 +137,27 @@ class GRRLAdapter:
             preferences: 7-dimensional preference dictionary or vector.
             constraints: Optional hard effect prohibitions and parameter bounds.
             session_id: Optional tracking identifier.
+            previous_chain: Optional chain from previous generation for parameter diffing.
+            feedback_command: Optional user feedback command triggering this generation.
+            feedback_event_id: Optional ID of feedback event triggering this generation.
+            preference_before: Optional preference state prior to update.
+            unsupported_requests: Optional pipeline limitations to record.
 
         Returns:
-            Dictionary matching contracts/pta_grrl_contract.md.
+            Dictionary matching contracts/pta_grrl_contract.md with an auditable decision_trace.
         """
         sid = session_id or f"session_{uuid.uuid4().hex[:8]}"
         gid = f"gen_{uuid.uuid4().hex[:8]}"
         sample_id = f"sample_{uuid.uuid4().hex[:8]}"
+
+        # Helper to format preferences dict
+        def _to_pref_dict(p_val):
+            if p_val is None:
+                return {}
+            if isinstance(p_val, dict):
+                return {k: float(v) for k, v in p_val.items()}
+            arr = np.asarray(p_val, dtype=float)
+            return {dim: float(arr[i]) for i, dim in enumerate(PREFERENCE_DIMENSIONS) if i < len(arr)}
 
         # 1. Validate inputs
         try:
@@ -145,6 +165,13 @@ class GRRLAdapter:
             valid_c = validate_constraints(constraints)
             taste_vector = self.taste_projector(valid_p)
         except Exception as e:
+            failed_trace = DecisionTrace(
+                session_id=sid,
+                generation_id=gid,
+                feedback_event_id=feedback_event_id,
+                feedback_command=feedback_command,
+                rendering_status="failed",
+            )
             return {
                 "status": "failed",
                 "session_id": sid,
@@ -155,10 +182,18 @@ class GRRLAdapter:
                 "chain": [],
                 "metrics": {},
                 "audio_ref": None,
+                "decision_trace": failed_trace,
             }
 
         # 2. Check environment factory
         if self.env_factory is None:
+            failed_trace = DecisionTrace(
+                session_id=sid,
+                generation_id=gid,
+                feedback_event_id=feedback_event_id,
+                feedback_command=feedback_command,
+                rendering_status="failed",
+            )
             return {
                 "status": "failed",
                 "session_id": sid,
@@ -169,6 +204,7 @@ class GRRLAdapter:
                 "chain": [],
                 "metrics": {},
                 "audio_ref": None,
+                "decision_trace": failed_trace,
             }
 
         # 3. Instantiate and run environment
@@ -229,6 +265,23 @@ class GRRLAdapter:
                 metrics = getattr(env, "metrics", {})
                 audio_ref = getattr(env, "audio_ref", f"audio/{gid}.wav")
 
+            # Build successful DecisionTrace
+            trace = DecisionTrace(
+                session_id=sid,
+                generation_id=gid,
+                feedback_event_id=feedback_event_id,
+                feedback_command=feedback_command,
+                preference_before=_to_pref_dict(preference_before),
+                preference_after=_to_pref_dict(valid_p),
+                guidance_sent={"constraints": valid_c, "z_taste": taste_vector.tolist()},
+                selected_chain=chain,
+                previous_chain=previous_chain or [],
+                rendering_status="success",
+                audio_ref=audio_ref,
+                audio_metrics=metrics,
+                unsupported_requests=unsupported_requests or [],
+            )
+
             return {
                 "status": "success",
                 "session_id": sid,
@@ -239,9 +292,17 @@ class GRRLAdapter:
                 "audio_ref": audio_ref,
                 "applied_taste": taste_vector.tolist(),
                 "applied_constraints": valid_c,
+                "decision_trace": trace,
             }
 
         except Exception as e:
+            failed_trace = DecisionTrace(
+                session_id=sid,
+                generation_id=gid,
+                feedback_event_id=feedback_event_id,
+                feedback_command=feedback_command,
+                rendering_status="failed",
+            )
             return {
                 "status": "failed",
                 "session_id": sid,
@@ -252,6 +313,7 @@ class GRRLAdapter:
                 "chain": [],
                 "metrics": {},
                 "audio_ref": None,
+                "decision_trace": failed_trace,
             }
 
     def generate_initial(
