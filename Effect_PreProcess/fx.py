@@ -1,15 +1,21 @@
-"""Phase 1 effects (Pedalboard), parameter sampling, combinations and labels.
+"""Phase 1 effects (Pedalboard), parameter sampling, chains and labels.
 
-* Label = binary ``[EQ, Compressor, Reverb]`` vector (effect presence only).
-* Chains are always processed in the fixed order EQ -> Compressor -> Reverb.
-* Parameters are sampled from ``config.yaml`` with a NumPy RNG seeded per
-  sample, so the same seed always gives the same parameters and audio.
+Two chain modes (``generation.chain_mode``):
+
+* ``subset``  — the 7 non-empty subsets, always processed in the fixed order
+  EQ -> Compressor -> Reverb. Label = presence ``[EQ, Compressor, Reverb]``.
+* ``ordered`` — every order of every non-empty subset (15 chains), processed
+  in the chain's own order. Label = position ``[pos_EQ, pos_Comp, pos_Rev]``
+  (0 = absent, 1..3 = position in the chain).
+
+Parameters are sampled from ``config.yaml`` with a NumPy RNG seeded per
+sample, so the same seed always gives the same parameters and audio.
 """
 
 from __future__ import annotations
 
 import math
-from itertools import combinations
+from itertools import combinations, permutations
 from typing import Any, Mapping, Sequence
 
 import numpy as np
@@ -19,11 +25,13 @@ from audio_utils import residual_db
 
 LABEL_NAMES: tuple[str, ...] = ("EQ", "Compressor", "Reverb")
 LABEL_COLUMNS = {"EQ": "eq_label", "Compressor": "compressor_label", "Reverb": "reverb_label"}
+POSITION_COLUMNS = {"EQ": "eq_position", "Compressor": "compressor_position", "Reverb": "reverb_position"}
 PARAM_COLUMNS = {"EQ": "eq_params", "Compressor": "compressor_params", "Reverb": "reverb_params"}
+CHAIN_MODES = ("subset", "ordered")
 VALUE_DECIMALS = 4  # sampled values are rounded so metadata == the value given to Pedalboard
 
 
-# --------------------------------------------------------------- combinations / labels
+# --------------------------------------------------------------- chains / labels
 
 def effect_combinations(order: Sequence[str]) -> list[tuple[str, ...]]:
     """All non-empty subsets in processing order:
@@ -31,8 +39,34 @@ def effect_combinations(order: Sequence[str]) -> list[tuple[str, ...]]:
     return [combo for r in range(1, len(order) + 1) for combo in combinations(order, r)]
 
 
+def effect_chains(order: Sequence[str], mode: str = "subset") -> list[tuple[str, ...]]:
+    """Chains to render. In ``ordered`` mode the list index is the chain's class id (0..14) and the
+    canonical order of each subset always comes first among its permutations."""
+    if mode == "subset":
+        return effect_combinations(order)
+    if mode == "ordered":
+        return [chain for subset in effect_combinations(order) for chain in permutations(subset)]
+    raise ValueError(f"chain_mode must be one of {CHAIN_MODES} (got {mode!r})")
+
+
+def chain_name(chain: Sequence[str], mode: str) -> str:
+    """``EQ+Reverb`` for a subset, ``Reverb->EQ`` for an ordered chain."""
+    return ("+" if mode == "subset" else "->").join(chain)
+
+
 def label_vector(chain: Sequence[str]) -> list[int]:
+    """Presence: 1 if the effect is in the chain."""
     return [int(name in chain) for name in LABEL_NAMES]
+
+
+def position_vector(chain: Sequence[str]) -> list[int]:
+    """Position of each effect in the chain (1-based), 0 if absent. Reverb->EQ -> [2, 0, 1]."""
+    return [list(chain).index(name) + 1 if name in chain else 0 for name in LABEL_NAMES]
+
+
+def slot_vector(chain: Sequence[str]) -> list[int]:
+    """Effect at each chain slot (1=EQ, 2=Compressor, 3=Reverb), 0 = empty. Reverb->EQ -> [3, 1, 0]."""
+    return [LABEL_NAMES.index(e) + 1 for e in chain] + [0] * (len(LABEL_NAMES) - len(chain))
 
 
 # --------------------------------------------------------------- Pedalboard plugins
@@ -111,25 +145,28 @@ class ParameterSampler:
 
 # --------------------------------------------------------------- rendering
 
-def render_chain(dry: np.ndarray, sample_rate: int, chain: Sequence[str], order: Sequence[str],
+def render_chain(dry: np.ndarray, sample_rate: int, chain: Sequence[str],
                  sampler: ParameterSampler, rng: np.random.Generator,
-                 min_change_db: float, max_retries: int) -> dict[str, Any]:
-    """Apply ``chain`` to ``dry`` sequentially in the fixed ``order``.
+                 min_change_db: float, max_retries: int,
+                 fixed_params: Mapping[str, Mapping[str, float]] | None = None) -> dict[str, Any]:
+    """Apply the effects of ``chain`` to ``dry`` one after another, in chain order.
 
     Each effect is rendered step by step so its parameters can be re-sampled
     (random mode) if it changes the signal by less than ``min_change_db``.
+    With ``fixed_params`` (effect -> parameters) nothing is sampled: those exact
+    values are used, e.g. to render another order of an already rendered effect set.
     The output equals running the chained plugins with the returned parameters.
     """
     x = dry
     parameters: dict[str, dict[str, float]] = {}
     changes: dict[str, float] = {}
     low: list[str] = []
-    for effect in [e for e in order if e in chain]:
+    for effect in chain:
         for _ in range(max_retries + 1):
-            params = sampler.sample(effect, rng)
+            params = dict(fixed_params[effect]) if fixed_params else sampler.sample(effect, rng)
             y = apply_effect(effect, x, sample_rate, params)
             change = residual_db(x, y)
-            if change >= min_change_db or sampler.mode == "fixed":
+            if change >= min_change_db or sampler.mode == "fixed" or fixed_params:
                 break
         if change < min_change_db:
             low.append(effect)

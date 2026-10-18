@@ -26,11 +26,13 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 
 from common import DEFAULT_CONFIG, SUMMARY_FILE, load_config, read_csv
-from generate_phase1 import SAMPLE_COLUMNS, dataset_card
+from generate_phase1 import chain_mode, dataset_card, sample_columns
 
 AUDIO_COLUMNS = {"dry_audio", "wet_audio"}
 INT_COLUMNS = {"source_id", "eq_label", "compressor_label", "reverb_label", "sample_rate", "num_channels",
-               "random_seed", "sample_seed"}
+               "random_seed", "sample_seed",
+               # ordered mode
+               "eq_position", "compressor_position", "reverb_position", "chain_class", "num_effects"}
 FLOAT_COLUMNS = {"duration_s", "dry_peak_dbfs", "wet_peak_dbfs"}
 AUDIO_TYPE = pa.struct([("bytes", pa.binary()), ("path", pa.string())])
 MAX_SHARD_BYTES = 300 * 1024**2   # keeps each file comfortably below Hub/viewer limits
@@ -48,9 +50,9 @@ def column_spec(name: str) -> tuple[pa.DataType, dict]:
     return pa.string(), {"dtype": "string", "_type": "Value"}
 
 
-def build_schema() -> pa.Schema:
+def build_schema(columns: tuple[str, ...]) -> pa.Schema:
     fields, features = [], {}
-    for name in SAMPLE_COLUMNS:
+    for name in columns:
         arrow_type, feature = column_spec(name)
         fields.append(pa.field(name, arrow_type))
         features[name] = feature
@@ -59,9 +61,9 @@ def build_schema() -> pa.Schema:
     return pa.schema(fields, metadata=meta)
 
 
-def convert_row(row: dict[str, str], root: Path) -> dict:
+def convert_row(row: dict[str, str], root: Path, columns: tuple[str, ...]) -> dict:
     out = {}
-    for name in SAMPLE_COLUMNS:
+    for name in columns:
         raw = row[name]
         if name in AUDIO_COLUMNS:
             out[name] = {"bytes": (root / raw).read_bytes(), "path": raw}
@@ -74,27 +76,29 @@ def convert_row(row: dict[str, str], root: Path) -> dict:
     return out
 
 
-def export_split(split: str, rows: list[dict[str, str]], root: Path, schema: pa.Schema) -> list[Path]:
+def export_split(split: str, rows: list[dict[str, str]], root: Path, schema: pa.Schema,
+                 prefix: str = "") -> list[Path]:
+    """Shards ``data/<split><prefix>-NNNNN-of-NNNNN.parquet``; ``prefix`` (e.g. ``-b03``) keeps batches apart."""
     sizes = [(root / r["dry_audio"]).stat().st_size + (root / r["wet_audio"]).stat().st_size for r in rows]
     num_shards = max(1, math.ceil(sum(sizes) / MAX_SHARD_BYTES))
     per_shard = math.ceil(len(rows) / num_shards)
     paths = []
     for i in range(num_shards):
         chunk = rows[i * per_shard : (i + 1) * per_shard]
-        path = root / "data" / f"{split}-{i:05d}-of-{num_shards:05d}.parquet"
-        table = pa.Table.from_pylist([convert_row(r, root) for r in chunk], schema=schema)
+        path = root / "data" / f"{split}{prefix}-{i:05d}-of-{num_shards:05d}.parquet"
+        table = pa.Table.from_pylist([convert_row(r, root, schema.names) for r in chunk], schema=schema)
         pq.write_table(table, path, row_group_size=ROW_GROUP_SIZE)
         paths.append(path)
     return paths
 
 
-def verify_split(paths: list[Path], rows: list[dict[str, str]], root: Path) -> None:
+def verify_split(paths: list[Path], rows: list[dict[str, str]], root: Path, columns: tuple[str, ...]) -> None:
     """Read the shards back and compare every value with the CSV and every audio blob with its WAV file."""
     restored = [r for p in paths for r in pq.read_table(p).to_pylist()]
     if len(restored) != len(rows):
         raise SystemExit(f"Row count mismatch: {len(restored)} in Parquet vs {len(rows)} in CSV")
     for got, want in zip(restored, rows):
-        for name in SAMPLE_COLUMNS:
+        for name in columns:
             if name in AUDIO_COLUMNS:
                 ok = got[name]["path"] == want[name] and got[name]["bytes"] == (root / want[name]).read_bytes()
             elif name in FLOAT_COLUMNS:
@@ -118,11 +122,14 @@ def main() -> None:
 
     for old in (root / "data").glob("*.parquet"):
         old.unlink()
-    schema = build_schema()
+    columns = sample_columns(chain_mode(config))
+    schema = build_schema(columns)
     for split in config["splits"]:
         rows = read_csv(root / "metadata" / f"{split}.csv")
+        if not rows:
+            continue
         paths = export_split(split, rows, root, schema)
-        verify_split(paths, rows, root)
+        verify_split(paths, rows, root, columns)
         size_mb = sum(p.stat().st_size for p in paths) / 1024**2
         print(f"{split:<10} {len(rows):>4} rows -> {len(paths)} shard(s), {size_mb:.0f} MB, verified")
 

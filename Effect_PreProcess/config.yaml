@@ -40,14 +40,19 @@ preprocessing:                   # applied to the DRY clip only; wet audio is ne
   window_hop_seconds: 0.5
 
 generation:
+  # subset  = 7 chains, every subset in the fixed order below; label = presence [EQ, Comp, Rev]
+  # ordered = 15 chains, every order of every subset; label = position [pos_EQ, pos_Comp, pos_Rev]
+  #           (see config_order.yaml)
+  chain_mode: subset
   seed: 42                       # one seed controls clip windows and every effect parameter
   parameter_mode: random         # random = sampled in [min, max] per sample | fixed = always `fixed`
   min_effect_change_db: -30.0    # audibility guard: an effect must change the signal by at least this much
   max_retries: 10                # random mode: re-sample an inaudible effect up to this many times
 
-# Fixed processing order. Every chain is applied in this order:
+# Canonical processing order. In subset mode every chain is applied in this order:
 #   EQ -> Compressor -> Reverb
 # The 7 combinations are all non-empty subsets of these effects.
+# In ordered mode this order only fixes the label layout [EQ, Compressor, Reverb].
 effect_order: [EQ, Compressor, Reverb]
 
 # Parameter names follow the shared team schema.

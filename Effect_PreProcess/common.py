@@ -17,11 +17,25 @@ DEFAULT_CONFIG = HERE / "config.yaml"
 SUMMARY_FILE = "dataset_summary.json"
 
 
+def _deep_merge(base: dict[str, Any], override: Mapping[str, Any]) -> dict[str, Any]:
+    out = dict(base)
+    for key, value in override.items():
+        out[key] = _deep_merge(out[key], value) if isinstance(value, Mapping) and isinstance(out.get(key), dict) else value
+    return out
+
+
+def _read_config(path: Path) -> dict[str, Any]:
+    """One YAML file; ``paths`` resolved against its own folder; ``extends: other.yaml`` merged underneath."""
+    config = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    config["paths"] = {k: str((path.parent / v).resolve()) for k, v in (config.get("paths") or {}).items()}
+    parent = config.pop("extends", None)
+    return _deep_merge(_read_config((path.parent / parent).resolve()), config) if parent else config
+
+
 def load_config(path: Path = DEFAULT_CONFIG) -> dict[str, Any]:
-    """Read config.yaml and resolve every entry of ``paths`` against the config's folder."""
-    path = Path(path).resolve()
-    config = yaml.safe_load(path.read_text(encoding="utf-8"))
-    config["paths"] = {k: (path.parent / v).resolve() for k, v in config["paths"].items()}
+    """Read a config file (following ``extends``) and return ``paths`` as absolute Paths."""
+    config = _read_config(Path(path).resolve())
+    config["paths"] = {k: Path(v) for k, v in config["paths"].items()}
     return config
 
 

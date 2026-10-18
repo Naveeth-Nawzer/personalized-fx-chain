@@ -1,10 +1,16 @@
-"""Step 2 — generate the Phase 1 dry/wet effect-type dataset with Pedalboard.
+"""Step 2 — generate the Phase 1 dry/wet effect dataset with Pedalboard.
 
-For every source sample (e.g. ``1-Bass``) one dry clip is prepared and the 7
-effect combinations are rendered in the fixed order EQ -> Compressor -> Reverb:
+For every source sample (e.g. ``1-Bass``) one dry clip is prepared and every
+chain of ``generation.chain_mode`` is rendered:
+
+* ``subset`` (config.yaml): the 7 combinations in the fixed order EQ -> Compressor -> Reverb
 
     1-Bass-EQ, 1-Bass-Compressor, 1-Bass-Reverb, 1-Bass-EQ-Compressor,
     1-Bass-EQ-Reverb, 1-Bass-Compressor-Reverb, 1-Bass-EQ-Compressor-Reverb
+
+* ``ordered`` (config_order.yaml): all 15 orders, e.g. 1-Bass-Reverb-EQ;
+  label = position of each effect in the chain. Built batch by batch with
+  ``run_batches.py``.
 
 Output (``paths.output_dir``)::
 
@@ -43,7 +49,8 @@ import yaml
 
 from audio_utils import SourceRejected, amplitude_to_db, peak, prepare_dry_clip, write_audio
 from common import DEFAULT_CONFIG, SUMMARY_FILE, load_config, read_csv, stable_hash, write_csv
-from fx import LABEL_COLUMNS, LABEL_NAMES, PARAM_COLUMNS, ParameterSampler, effect_combinations, label_vector, render_chain
+from fx import (LABEL_COLUMNS, LABEL_NAMES, PARAM_COLUMNS, POSITION_COLUMNS, ParameterSampler, chain_name,
+                effect_chains, label_vector, position_vector, render_chain, slot_vector)
 
 # Independent random streams derived from the single seed.
 STREAM_CLIP, STREAM_PARAMS = 0, 1
@@ -57,6 +64,10 @@ SAMPLE_COLUMNS = (
     "sample_rate", "num_channels", "duration_s", "dry_peak_dbfs", "wet_peak_dbfs",
     "dsp_backend", "parameter_mode", "random_seed", "sample_seed",
 )
+ORDER_COLUMNS = (
+    "presence_label", "eq_position", "compressor_position", "reverb_position", "slot_label",
+    "chain_class", "num_effects",
+)
 SOURCE_COLUMNS = (
     "source_sample_id", "source_id", "source_category", "source_song", "split", "dry_audio", "source_file",
     "original_sample_rate", "original_channels", "original_duration_s", "clip_start_s", "clip_end_s",
@@ -66,9 +77,31 @@ SKIPPED_COLUMNS = ("source_sample_id", "source_file", "split", "reason")
 FAILURE_COLUMNS = ("sample_id", "source_sample_id", "effect_chain", "error")
 
 
-def load_sources(config: dict[str, Any]) -> list[dict[str, Any]]:
+LABEL_FORMATS = {
+    "subset": "presence [EQ, Compressor, Reverb]: 1 = effect used",
+    "ordered": "position [EQ, Compressor, Reverb]: 0 = absent, 1..3 = position in the chain",
+}
+
+
+def chain_mode(config: dict[str, Any]) -> str:
+    return config["generation"].get("chain_mode", "subset")
+
+
+def sample_columns(mode: str) -> tuple[str, ...]:
+    """Subset mode keeps the original Phase 1 columns; ordered mode adds the order labels."""
+    if mode == "subset":
+        return SAMPLE_COLUMNS
+    i = SAMPLE_COLUMNS.index("reverb_label") + 1
+    return SAMPLE_COLUMNS[:i] + ORDER_COLUMNS + SAMPLE_COLUMNS[i:] + ("parameter_set_id",)
+
+
+def dsp_backend() -> str:
+    return f"pedalboard {pedalboard.__version__}"
+
+
+def load_sources(config: dict[str, Any], source_dir: Path | None = None) -> list[dict[str, Any]]:
     """Source samples from the downloaded dataset, filtered and in a stable order."""
-    source_dir = config["paths"]["source_dir"]
+    source_dir = source_dir or config["paths"]["source_dir"]
     index = source_dir / "metadata" / "samples.csv"
     if not index.is_file():
         sys.exit(f"Source dataset not found at {source_dir}. Run download_source.py first.")
@@ -98,23 +131,23 @@ def prepare_output_dir(output_dir: Path, source_dir: Path, overwrite: bool) -> N
     output_dir.mkdir(parents=True, exist_ok=True)
 
 
-def generate(config: dict[str, Any], overwrite: bool, limit: int | None) -> dict[str, Any]:
-    paths, gen = config["paths"], config["generation"]
-    source_dir, output_dir = paths["source_dir"], paths["output_dir"]
+def process_sources(config: dict[str, Any], sources: list[dict[str, Any]], source_dir: Path,
+                    output_dir: Path) -> dict[str, list[dict[str, Any]]]:
+    """Dry clip + every chain for each source. Writes the WAVs and returns the metadata rows
+    (``records``, ``source_rows``, ``skipped``, ``failures``). Works on any subset of sources, so
+    a full run and a batch-by-batch run give identical files."""
+    gen = config["generation"]
     seed = int(gen["seed"])
     order = list(config["effect_order"])
     if sorted(order) != sorted(LABEL_NAMES):
         sys.exit(f"effect_order must contain exactly {list(LABEL_NAMES)}")
-    combos = effect_combinations(order)
+    mode = chain_mode(config)
+    chains = effect_chains(order, mode)
+    # Ordered mode: every order of an effect set reuses the parameters of its canonical order.
+    share = mode == "ordered" and bool(gen.get("share_parameters", False))
     sampler = ParameterSampler(config["parameters"], gen["parameter_mode"])
-    backend = f"pedalboard {pedalboard.__version__}"
-
-    sources = load_sources(config)
-    if limit:
-        sources = sources[:limit]
-    prepare_output_dir(output_dir, source_dir, overwrite)
-    print(f"{len(sources)} source samples x {len(combos)} combinations = {len(sources) * len(combos)} pairs "
-          f"(seed {seed}, {gen['parameter_mode']} parameters, {backend})")
+    backend = dsp_backend()
+    subtype = config["audio"]["output_subtype"]
 
     records, source_rows, skipped, failures = [], [], [], []
     started = time.time()
@@ -130,32 +163,44 @@ def generate(config: dict[str, Any], overwrite: bool, limit: int | None) -> dict
             continue
 
         dry_rel = f"data/{split}/dry/{src_sid}.wav"
-        write_audio(output_dir / dry_rel, clip.audio, clip.sample_rate, config["audio"]["output_subtype"])
+        write_audio(output_dir / dry_rel, clip.audio, clip.sample_rate, subtype)
         base = {"source_sample_id": src_sid, "source_id": int(src["source_id"]),
                 "source_category": src["source_category"], "source_song": src["source_song"], "split": split}
         source_rows.append({**base, "dry_audio": dry_rel, "source_file": src["file_name"], **clip.info})
 
-        for chain in combos:
+        set_params: dict[tuple[str, ...], dict] = {}  # canonical effect set -> its parameters
+        for class_id, chain in enumerate(chains):
+            canonical = tuple(e for e in order if e in chain)
             sample_id = f"{src_sid}-{'-'.join(chain)}"
-            sample_seed = int(np.random.SeedSequence([seed, STREAM_PARAMS, stable_hash(sample_id)]).generate_state(1)[0])
+            # Seeded by the canonical chain's id, so the canonical order renders exactly as in subset mode.
+            param_set_id = f"{src_sid}-{'-'.join(canonical)}" if share else sample_id
+            sample_seed = int(np.random.SeedSequence([seed, STREAM_PARAMS, stable_hash(param_set_id)]).generate_state(1)[0])
+            fixed = set_params.get(canonical) if share and chain != canonical else None
+            if share and chain != canonical and fixed is None:
+                failures.append({"sample_id": sample_id, "source_sample_id": src_sid, "effect_chain": list(chain),
+                                 "error": f"parameters of {chain_name(canonical, mode)} unavailable"})
+                continue
             try:
-                result = render_chain(clip.audio, clip.sample_rate, chain, order, sampler,
+                result = render_chain(clip.audio, clip.sample_rate, chain, sampler,
                                       np.random.default_rng(sample_seed),
-                                      float(gen["min_effect_change_db"]), int(gen["max_retries"]))
+                                      float(gen["min_effect_change_db"]), int(gen["max_retries"]), fixed)
             except Exception as exc:  # noqa: BLE001 — record and continue
                 failures.append({"sample_id": sample_id, "source_sample_id": src_sid,
                                  "effect_chain": list(chain), "error": str(exc)})
                 continue
+            if share and chain == canonical:
+                set_params[canonical] = result["parameters"]
             wet_rel = f"data/{split}/wet/{sample_id}.wav"
-            write_audio(output_dir / wet_rel, result["wet"], clip.sample_rate, config["audio"]["output_subtype"])
+            write_audio(output_dir / wet_rel, result["wet"], clip.sample_rate, subtype)
 
             params = result["parameters"]
-            label = label_vector(chain)
-            records.append({
+            presence = label_vector(chain)
+            record = {
                 "sample_id": sample_id, **base,
                 "dry_audio": dry_rel, "wet_audio": wet_rel,
-                "effect_chain": list(chain), "combination": "+".join(chain), "label": label,
-                **{LABEL_COLUMNS[n]: v for n, v in zip(LABEL_NAMES, label)},
+                "effect_chain": list(chain), "combination": chain_name(chain, mode),
+                "label": presence if mode == "subset" else position_vector(chain),
+                **{LABEL_COLUMNS[n]: v for n, v in zip(LABEL_NAMES, presence)},
                 **{PARAM_COLUMNS[n]: params.get(n) for n in LABEL_NAMES},
                 "parameters": params,
                 "parameters_normalized": {n: sampler.normalize(n, p) for n, p in params.items()},
@@ -167,21 +212,45 @@ def generate(config: dict[str, Any], overwrite: bool, limit: int | None) -> dict
                 "wet_peak_dbfs": round(amplitude_to_db(peak(result["wet"])), 3),
                 "dsp_backend": backend, "parameter_mode": sampler.mode,
                 "random_seed": seed, "sample_seed": sample_seed,
-            })
+            }
+            if mode == "ordered":
+                record.update({
+                    "presence_label": presence,
+                    **{POSITION_COLUMNS[n]: p for n, p in zip(LABEL_NAMES, position_vector(chain))},
+                    "slot_label": slot_vector(chain), "chain_class": class_id, "num_effects": len(chain),
+                    "parameter_set_id": param_set_id,
+                })
+            records.append(record)
         print(f"[{k}/{len(sources)}] {split:<10} {src_sid:<12} {src['source_song']}  ({time.time() - started:.0f}s)")
+    return {"records": records, "source_rows": source_rows, "skipped": skipped, "failures": failures}
 
-    if not records:
+
+def generate(config: dict[str, Any], overwrite: bool, limit: int | None) -> dict[str, Any]:
+    source_dir, output_dir = config["paths"]["source_dir"], config["paths"]["output_dir"]
+    gen = config["generation"]
+    sources = load_sources(config)
+    if limit:
+        sources = sources[:limit]
+    prepare_output_dir(output_dir, source_dir, overwrite)
+    n_chains = len(effect_chains(config["effect_order"], chain_mode(config)))
+    print(f"{len(sources)} source samples x {n_chains} combinations = {len(sources) * n_chains} pairs "
+          f"(seed {gen['seed']}, {gen['parameter_mode']} parameters, {dsp_backend()})")
+
+    result = process_sources(config, sources, source_dir, output_dir)
+    if not result["records"]:
         sys.exit("No samples were generated.")
-    summary = write_metadata(config, records, source_rows, skipped, failures, combos, backend)
-    return summary
+    return write_metadata(config, **result)
 
 
-def write_metadata(config, records, source_rows, skipped, failures, combos, backend) -> dict[str, Any]:
+def write_metadata(config, records, source_rows, skipped, failures, extra: dict | None = None) -> dict[str, Any]:
+    """Metadata CSVs, summary and dataset card for all ``records`` (``extra`` is merged into the summary)."""
     output_dir = config["paths"]["output_dir"]
     meta = output_dir / "metadata"
     splits = config["splits"]
+    mode = chain_mode(config)
+    chains = effect_chains(config["effect_order"], mode)
     for split in splits:
-        write_csv(meta / f"{split}.csv", [r for r in records if r["split"] == split], SAMPLE_COLUMNS)
+        write_csv(meta / f"{split}.csv", [r for r in records if r["split"] == split], sample_columns(mode))
     write_csv(meta / "sources.csv", source_rows, SOURCE_COLUMNS)
     write_csv(meta / "skipped.csv", skipped, SKIPPED_COLUMNS)
     write_csv(meta / "failures.csv", failures, FAILURE_COLUMNS)
@@ -191,16 +260,20 @@ def write_metadata(config, records, source_rows, skipped, failures, combos, back
     songs = {s: sorted({r["source_id"] for r in source_rows if r["split"] == s}) for s in splits}
     total_songs = sum(len(v) for v in songs.values())
     summary = {
-        "phase": "phase1_effect_type",
-        "task": "multi-label effect-type classification from paired dry/wet audio",
+        "phase": "phase1_effect_type" if mode == "subset" else "phase1_effect_order",
+        "task": ("multi-label effect-type classification from paired dry/wet audio" if mode == "subset" else
+                 "effect-chain prediction (which effects, in which order) from paired dry/wet audio"),
         "source_dataset": config["source"]["repo_id"],
         "label_names": list(LABEL_NAMES),
-        "processing_order": " -> ".join(config["effect_order"]),
-        "effect_combinations": ["+".join(c) for c in combos],
+        "chain_mode": mode,
+        "label_format": LABEL_FORMATS[mode],
+        "processing_order": (" -> ".join(config["effect_order"]) if mode == "subset" else
+                             "chain order (every order of every non-empty subset)"),
+        "effect_combinations": [chain_name(c, mode) for c in chains],
         "sample_id_format": "<source_id>-<source_category>-<effect>[-<effect>...]",
         "num_sources": len(source_rows),
         "num_pairs": len(records),
-        "num_expected_pairs": len(source_rows) * len(combos),
+        "num_expected_pairs": len(source_rows) * len(chains),
         "num_skipped_sources": len(skipped),
         "num_failed_pairs": len(failures),
         "splits": {
@@ -222,16 +295,26 @@ def write_metadata(config, records, source_rows, skipped, failures, combos, back
         "preprocessing": dict(config["preprocessing"]),
         "parameter_mode": config["generation"]["parameter_mode"],
         "random_seed": config["generation"]["seed"],
-        "dsp_backend": backend,
+        "dsp_backend": dsp_backend(),
         "python": platform.python_version(),
         "created_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
     }
+    if mode == "ordered":
+        summary["share_parameters"] = bool(config["generation"].get("share_parameters", False))
+        summary["chain_classes"] = [
+            {"chain_class": i, "chain": chain_name(c, mode), "label": position_vector(c),
+             "presence_label": label_vector(c), "slot_label": slot_vector(c)}
+            for i, c in enumerate(chains)
+        ]
+    summary.update(extra or {})
     (meta / SUMMARY_FILE).write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
     (output_dir / "README.md").write_text(dataset_card(config, summary), encoding="utf-8")
     return summary
 
 
 def dataset_card(config: dict[str, Any], s: dict[str, Any]) -> str:
+    if s.get("chain_mode") == "ordered":
+        return order_dataset_card(config, s)
     split_rows = "\n".join(
         f"| {k} | {v['num_songs']} ({v['song_fraction']:.0%}) | {v['num_sources']} | {v['num_pairs']} |"
         for k, v in s["splits"].items()
@@ -341,6 +424,126 @@ dry, sr = sf.read(f"{{root}}/{{row.dry_audio}}")
 wet, _ = sf.read(f"{{root}}/{{row.wet_audio}}")
 label = json.loads(row.label)          # [EQ, Compressor, Reverb]
 params = json.loads(row.parameters)    # {{"EQ": {{"frequency": ..., "gain": ..., "q": ...}}, ...}}
+```
+
+## License
+
+Derived from MUSDB18 — **non-commercial research use only**, under the original dataset terms.
+"""
+
+
+def order_dataset_card(config: dict[str, Any], s: dict[str, Any]) -> str:
+    """Dataset card for the 15-chain effect-order dataset (``chain_mode: ordered``)."""
+    repo_id = config["huggingface"]["repo_id"]
+    title = config["huggingface"].get("pretty_name", "Inverse FX Phase 1 — Effect-Order Dataset")
+    split_rows = "\n".join(
+        f"| {k} | {v['num_songs']} ({v['song_fraction']:.0%}) | {v['num_sources']} | {v['num_pairs']} |"
+        for k, v in s["splits"].items()
+    )
+    chain_rows = "\n".join(
+        f"| {c['chain_class']} | {c['chain'].replace('->', ' → ')} | `{c['label']}` | `{c['presence_label']}` | "
+        f"`{c['slot_label']}` |"
+        for c in s["chain_classes"]
+    )
+    a = s["audio"]
+    # Only splits that already have shards, so the viewer never points at a missing file pattern.
+    data_files = "\n".join(f"  - split: {k}\n    path: data/{k}-*.parquet"
+                           for k, v in s["splits"].items() if v["num_pairs"])
+    progress = s.get("batches")
+    status = ""
+    if progress and progress["completed"] < progress["total"]:
+        status = (f"\n> **Build in progress:** batch {progress['completed']} of {progress['total']} uploaded "
+                  f"({progress['songs_per_batch']} songs per batch). The counts below cover the uploaded batches.\n")
+    shared = ("Every order of the same effect set uses the **same parameters** for a given dry clip, so e.g. "
+              "`EQ → Reverb` and `Reverb → EQ` differ only in order (`parameter_set_id`)."
+              if s.get("share_parameters") else "Every chain samples its own parameters.")
+    return f"""---
+pretty_name: {title}
+license: other
+license_name: musdb18
+license_link: https://sigsep.github.io/datasets/musdb.html
+task_categories:
+- audio-classification
+tags:
+- audio
+- music
+- audio-effects
+- effect-order
+- pedalboard
+configs:
+- config_name: default
+  data_files:
+{data_files}
+---
+
+# {title}
+{status}
+Paired **dry / wet** audio for predicting **which effects were applied and in which order**
+(Inverse FX Chain Predictor). Generated from
+[{s['source_dataset']}](https://huggingface.co/datasets/{s['source_dataset']}) with
+[Pedalboard](https://github.com/spotify/pedalboard) ({s['dsp_backend']}).
+
+- Effects: **EQ**, **Compressor**, **Reverb** — every order of every non-empty subset,
+  **{len(s['chain_classes'])} chains** per dry clip, applied in the chain's own order
+- Label: position vector `[EQ, Compressor, Reverb]` — `0` = absent, `1`/`2`/`3` = position in the chain
+- {shared}
+- Sources: {s['num_sources']} dry clips ({', '.join(f'{k}: {v}' for k, v in s['category_distribution'].items())})
+- Pairs: {s['num_pairs']}
+- Audio: {a['sample_rate']} Hz, {a['channels']} channel(s), {a['duration']} s clips, 32-bit float WAV
+- Effect parameters: {s['parameter_mode']}, reproducible with seed {s['random_seed']}
+
+## Chains and labels
+
+| chain_class | chain | `label` (position) | `presence_label` | `slot_label` |
+|---|---|---|---|---|
+{chain_rows}
+
+| column | meaning |
+|---|---|
+| `label`, `eq_position` / `compressor_position` / `reverb_position` | position of each effect, 0 = absent |
+| `presence_label`, `eq_label` / `compressor_label` / `reverb_label` | 1 if the effect is used |
+| `slot_label` | effect at each slot: 1 = EQ, 2 = Compressor, 3 = Reverb, 0 = empty |
+| `chain_class` | 0–{len(s['chain_classes']) - 1}, row of the table above (single-label classification) |
+| `num_effects` | chain length (1–3) |
+| `parameter_set_id` | rows with the same id use identical effect parameters |
+
+## Splits (song level, inherited from the source dataset)
+
+| split | songs | dry clips | dry/wet pairs |
+|---|---|---|---|
+{split_rows}
+
+## Naming
+
+| field | example |
+|---|---|
+| `source_sample_id` | `1-Bass` |
+| `sample_id` | `1-Bass-Reverb-EQ` (effects in processing order) |
+| `effect_chain` | `["Reverb","EQ"]` |
+| `combination` | `Reverb->EQ` |
+| `label` | `[2,0,1]` |
+
+## Files
+
+- `data/<split>-*.parquet` — one row per pair, `dry_audio` and `wet_audio` as playable `Audio`;
+  all other columns as in `metadata/<split>.csv`
+- `data/<split>/dry/<source_sample_id>.wav` — dry clip (shared by its {len(s['chain_classes'])} wet versions)
+- `data/<split>/wet/<sample_id>.wav` — processed audio
+- `metadata/<split>.csv` — one row per pair (lists/dicts are JSON strings), exact parameters per effect
+- `metadata/sources.csv`, `skipped.csv`, `failures.csv`, `dataset_summary.json`, `config_used.yaml`
+
+## Usage
+
+```python
+import json
+from datasets import load_dataset
+
+ds = load_dataset("{repo_id}")
+row = ds["train"][0]
+row["dry_audio"], row["wet_audio"]          # Audio
+position = json.loads(row["label"])         # e.g. [2, 0, 1] -> Reverb, then EQ
+chain = json.loads(row["effect_chain"])     # ["Reverb", "EQ"]
+row["chain_class"]                          # 0..{len(s['chain_classes']) - 1}
 ```
 
 ## License
