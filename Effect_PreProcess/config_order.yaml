@@ -1,0 +1,33 @@
+# ============================================================
+# Inverse FX Chain Predictor — Phase 1 EFFECT-ORDER dataset
+# 15 chains per dry clip (every order of every non-empty subset)
+# ============================================================
+# Only the settings that differ from config.yaml are listed here; everything
+# else (audio, preprocessing, seed, parameter ranges) comes from config.yaml.
+# Relative paths are resolved against this file's directory.
+#
+# Build batch by batch (download -> generate -> upload -> delete):
+#   python run_batches.py --config config_order.yaml
+# ============================================================
+
+extends: config.yaml
+
+paths:
+  output_dir: output/phase1_effect_order   # holds one batch of audio at a time + all metadata
+  batch_source_dir: data/source_batch      # source stems of the current batch (deleted after use)
+
+generation:
+  chain_mode: ordered
+  # Every order of the same effect set uses the same parameters (sampled once for
+  # the canonical order EQ -> Compressor -> Reverb), so order is the only difference
+  # between e.g. EQ->Reverb and Reverb->EQ of the same clip.
+  share_parameters: true
+
+batch:
+  songs_per_batch: 15            # 150 songs -> 10 batches, ~5.5 GB peak disk, ~3.7 GB upload each
+  rerender_per_batch: 10         # pairs re-rendered from stored parameters as a check
+
+huggingface:
+  repo_id: APINAJA/inverse-fx-phase1-effect-order
+  private: true                  # derived from MUSDB18: non-commercial research use only
+  pretty_name: Inverse FX Phase 1 — Effect-Order Dataset
