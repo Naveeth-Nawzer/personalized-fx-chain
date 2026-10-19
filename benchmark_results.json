@@ -1,0 +1,141 @@
+{
+  "summary": {
+    "num_samples": 3,
+    "avg_loss_baseline_a": 0.84727,
+    "avg_loss_baseline_b": 0.78126,
+    "avg_improvement_baseline_a_pct": 24.71,
+    "avg_improvement_baseline_b_pct": 32.28,
+    "avg_loss_baseline_c_fixed_ppo": 1.51651,
+    "avg_improvement_baseline_c_pct": 17.38,
+    "avg_loss_proposed_grrl": 1.51186,
+    "avg_improvement_proposed_grrl_pct": 0.47
+  },
+  "samples": [
+    {
+      "sample_id": "sample_000001",
+      "dry_baseline_loss": 2.1267,
+      "baseline_a_warm_start": {
+        "loss": 0.63019,
+        "improvement_pct": 70.37,
+        "active_effects": [
+          "EQ",
+          "Distortion"
+        ],
+        "runtime_sec": 0.0647
+      },
+      "baseline_b_adam": {
+        "loss": 0.56971,
+        "improvement_pct": 73.21,
+        "active_effects": [
+          "EQ",
+          "Distortion"
+        ],
+        "runtime_sec": 1.7319,
+        "steps": 10
+      },
+      "baseline_c_fixed_ppo": {
+        "loss": 1.01789,
+        "improvement_pct": 52.14,
+        "active_effects": [
+          "EQ",
+          "Reverb",
+          "Flanger"
+        ],
+        "runtime_sec": 0.7772,
+        "steps": 10
+      },
+      "proposed_grrl": {
+        "loss": 2.09644,
+        "improvement_pct": 1.42,
+        "active_effects": [
+          "Reverb"
+        ],
+        "runtime_sec": 0.0147,
+        "steps": 2
+      }
+    },
+    {
+      "sample_id": "sample_000002",
+      "dry_baseline_loss": 1.38143,
+      "baseline_a_warm_start": {
+        "loss": 1.32949,
+        "improvement_pct": 3.76,
+        "active_effects": [
+          "Chorus"
+        ],
+        "runtime_sec": 0.01
+      },
+      "baseline_b_adam": {
+        "loss": 1.31291,
+        "improvement_pct": 4.96,
+        "active_effects": [
+          "Chorus"
+        ],
+        "runtime_sec": 0.1717,
+        "steps": 10
+      },
+      "baseline_c_fixed_ppo": {
+        "loss": 1.96075,
+        "improvement_pct": 0.0,
+        "active_effects": [
+          "EQ",
+          "Reverb",
+          "Chorus",
+          "Flanger"
+        ],
+        "runtime_sec": 0.7394,
+        "steps": 10
+      },
+      "proposed_grrl": {
+        "loss": 1.50904,
+        "improvement_pct": 0.0,
+        "active_effects": [
+          "Reverb"
+        ],
+        "runtime_sec": 0.0148,
+        "steps": 2
+      }
+    },
+    {
+      "sample_id": "sample_000003",
+      "dry_baseline_loss": 0.56709,
+      "baseline_a_warm_start": {
+        "loss": 0.58212,
+        "improvement_pct": 0.0,
+        "active_effects": [
+          "Chorus"
+        ],
+        "runtime_sec": 0.009
+      },
+      "baseline_b_adam": {
+        "loss": 0.46117,
+        "improvement_pct": 18.68,
+        "active_effects": [
+          "Chorus"
+        ],
+        "runtime_sec": 0.1439,
+        "steps": 10
+      },
+      "baseline_c_fixed_ppo": {
+        "loss": 1.57088,
+        "improvement_pct": 0.0,
+        "active_effects": [
+          "EQ",
+          "Chorus",
+          "Flanger"
+        ],
+        "runtime_sec": 0.7187,
+        "steps": 10
+      },
+      "proposed_grrl": {
+        "loss": 0.93009,
+        "improvement_pct": 0.0,
+        "active_effects": [
+          "Reverb"
+        ],
+        "runtime_sec": 0.0147,
+        "steps": 2
+      }
+    }
+  ]
+}
