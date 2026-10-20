@@ -1,32 +1,29 @@
-"""common/__init__.py — public API for the common package."""
-from common.audio_types import AudioMeta, AudioTensor, EffectParameterSpec
-from common.config_loader import (
-    load_effects_config,
-    load_system_config,
-    get_sample_rate,
-    get_channels,
-    get_dtype,
-    get_max_duration_seconds,
+"""common package initialization."""
+from common.audio_types import AudioMeta, EffectParameterSpec
+from common.fx_schema import EffectStep, FXChainSpec, FXChainValidator
+from common.config_loader import load_system_config, load_effects_config, get_sample_rate
+from common.parameter_mapper import ParameterMapper
+from common.losses import (
+    SpectralConvergenceLoss,
+    LogSTFTMagnitudeLoss,
+    STFTLoss,
+    MultiResolutionSTFTLoss,
+    CombinedAudioLoss,
 )
-from common.fx_schema import FXChainSpec, FXChainValidator, EffectStep
-from common.parameter_mapper import ParameterMapper, build_mappers_for_effect
-from common.validation import AudioValidationError, validate_audio_tensor
 
 __all__ = [
     "AudioMeta",
-    "AudioTensor",
     "EffectParameterSpec",
-    "load_effects_config",
-    "load_system_config",
-    "get_sample_rate",
-    "get_channels",
-    "get_dtype",
-    "get_max_duration_seconds",
+    "EffectStep",
     "FXChainSpec",
     "FXChainValidator",
-    "EffectStep",
+    "load_system_config",
+    "load_effects_config",
+    "get_sample_rate",
     "ParameterMapper",
-    "build_mappers_for_effect",
-    "AudioValidationError",
-    "validate_audio_tensor",
+    "SpectralConvergenceLoss",
+    "LogSTFTMagnitudeLoss",
+    "STFTLoss",
+    "MultiResolutionSTFTLoss",
+    "CombinedAudioLoss",
 ]

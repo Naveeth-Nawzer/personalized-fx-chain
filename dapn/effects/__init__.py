@@ -5,14 +5,19 @@ from dapn.effects.eq         import EQ
 from dapn.effects.compressor import Compressor
 from dapn.effects.delay      import Delay
 from dapn.effects.reverb     import Reverb
+from dapn.effects.distortion import Distortion
+from dapn.effects.chorus     import Chorus
+from dapn.effects.flanger    import Flanger
 
 # Registry: canonical name → class
-# Add new effects here when implemented.
 EFFECT_REGISTRY: dict[str, type] = {
     "EQ":         EQ,
     "Compressor": Compressor,
     "Delay":      Delay,
     "Reverb":     Reverb,
+    "Distortion": Distortion,
+    "Chorus":     Chorus,
+    "Flanger":    Flanger,
 }
 
 __all__ = [
@@ -20,5 +25,8 @@ __all__ = [
     "Compressor",
     "Delay",
     "Reverb",
+    "Distortion",
+    "Chorus",
+    "Flanger",
     "EFFECT_REGISTRY",
 ]
