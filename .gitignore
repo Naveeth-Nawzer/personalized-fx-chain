@@ -84,3 +84,8 @@ outputs/
 temp/
 tmp/
 *.wav.tmp
+
+# PTA Prototype Local Data
+pta-prototype/data/
+
+pta-prototype/evidence/
