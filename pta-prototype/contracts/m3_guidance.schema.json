@@ -1,0 +1,139 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "PTA → M3 Guidance Message",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "user_id",
+    "session_id",
+    "sample_id",
+    "event_type",
+    "action",
+    "reward",
+    "z_taste",
+    "constraints"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "enum": ["1.0"]
+    },
+    "user_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "session_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "sample_id": {
+      "type": "string"
+    },
+    "event_type": {
+      "type": "string",
+      "enum": ["PREFERENCE_UPDATED", "SESSION_SATISFIED"]
+    },
+    "feedback_command": {
+      "type": "string",
+      "enum": [
+        "MORE_REVERB",
+        "LESS_REVERB",
+        "MORE_COMPRESSION",
+        "LESS_COMPRESSION",
+        "MORE_DELAY",
+        "LESS_DELAY",
+        "BRIGHTER",
+        "WARMER",
+        "MORE_SATURATION",
+        "WIDER",
+        "SATISFIED"
+      ]
+    },
+    "changed_dimensions": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "enum": [
+          "brightness",
+          "compression",
+          "reverb",
+          "delay",
+          "saturation",
+          "width",
+          "warmth"
+        ]
+      }
+    },
+    "reward": {
+      "type": "object",
+      "required": ["r_pta", "confidence"],
+      "properties": {
+        "r_pta": {
+          "type": "number",
+          "minimum": -1.0,
+          "maximum": 1.0
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0
+        },
+        "explanation": {
+          "type": "string"
+        }
+      }
+    },
+    "z_taste": {
+      "type": "array",
+      "minItems": 16,
+      "maxItems": 16,
+      "items": {
+        "type": "number",
+        "minimum": -1.0,
+        "maximum": 1.0
+      }
+    },
+    "constraints": {
+      "type": "object",
+      "required": ["prohibited_effects", "parameter_bounds"],
+      "properties": {
+        "prohibited_effects": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "EQ",
+              "Compressor",
+              "Delay",
+              "Reverb",
+              "Distortion",
+              "Chorus",
+              "Flanger"
+            ]
+          }
+        },
+        "parameter_bounds": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "minItems": 2,
+              "maxItems": 2,
+              "items": {
+                "type": "number",
+                "minimum": 0.0,
+                "maximum": 1.0
+              }
+            }
+          }
+        }
+      }
+    },
+    "action": {
+      "type": "string",
+      "enum": ["REGENERATE", "NONE", "SESSION_CLOSED", "NO_REGENERATION"]
+    }
+  }
+}
